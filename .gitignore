@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.db
+*.sqlite
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+.venv/
+*.db-shm
+*.db-wal

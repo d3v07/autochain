@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f9fa;
+  --foreground: #1a1d23;
+  --surface: #ffffff;
+  --border: #d4d8dd;
+  --muted: #6b7280;
+  --accent: #0f5132;
+  --accent-light: #d1e7dd;
+  --accent-hover: #0a3622;
+  --danger: #b91c1c;
+  --warning: #d97706;
+  --info: #1d4ed8;
+  --ai: #6366f1;
+  --ai-light: #e0e7ff;
+  --ai-hover: #4f46e5;
+  --ai-foreground: #4338ca;
+  --radius: 2px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-ai: var(--ai);
+  --color-ai-light: var(--ai-light);
+  --color-ai-hover: var(--ai-hover);
+  --color-ai-foreground: var(--ai-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@autochain/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "seed": "tsx src/seed.ts",
+    "studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist *.db"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11",
+    "drizzle-orm": "^0.39",
+    "@autochain/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7",
+    "drizzle-kit": "^0.30",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}

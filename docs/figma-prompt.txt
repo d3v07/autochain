@@ -1,0 +1,9 @@
+Figma Design Prompt: AutoChain eSupplyPro Portal
+
+Design a clean B2B supply operations portal for AutoChain with a product identity named eSupplyPro.
+Use a professional operations-focused aesthetic suitable for client, vendor, and admin workflows.
+
+Key UI copy:
+- Product heading: "eSupplyPro"
+- Company subtitle: "AutoChain"
+- Assistant header: "eSupplyPro Assistant"

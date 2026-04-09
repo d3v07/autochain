@@ -1,0 +1,29 @@
+{
+  "name": "@autochain/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "fastify": "^5",
+    "@fastify/cors": "^11",
+    "@autochain/db": "workspace:*",
+    "@autochain/shared": "workspace:*",
+    "drizzle-orm": "^0.39",
+    "jsonwebtoken": "^9",
+    "zod": "^3.24"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9",
+    "tsx": "^4",
+    "typescript": "^5.7",
+    "vitest": "^3"
+  }
+}
