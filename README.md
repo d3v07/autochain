@@ -18,9 +18,6 @@ Customers manage orders, track deliveries, review invoices, and work alongside a
 
 Core areas: dashboard, delivery tracking, visual insights, orders, invoices, products, documents, workflows, AI insights, and EDI monitoring.
 
-<details>
-<summary><strong>Open customer screenshots</strong></summary>
-
 <table>
   <tr>
     <td width="50%" valign="top">
@@ -104,16 +101,11 @@ Core areas: dashboard, delivery tracking, visual insights, orders, invoices, pro
   </tr>
 </table>
 
-</details>
-
 ### Vendor Portal
 
 Vendors handle inbound purchase orders, catalog availability, outbound freight, and invoice submission.
 
 Core areas: vendor dashboard, purchase orders and freight, catalog management, and invoice processing.
-
-<details>
-<summary><strong>Open vendor screenshots</strong></summary>
 
 <table>
   <tr>
@@ -150,16 +142,11 @@ Core areas: vendor dashboard, purchase orders and freight, catalog management, a
   </tr>
 </table>
 
-</details>
-
 ### Admin Portal
 
 Platform administrators manage users, sessions, and cross-account visibility across the full system.
 
 Core areas: global dashboard, user management, and session monitoring.
-
-<details>
-<summary><strong>Open admin screenshots</strong></summary>
 
 <table>
   <tr>
@@ -189,8 +176,6 @@ Core areas: global dashboard, user management, and session monitoring.
     <td width="50%"></td>
   </tr>
 </table>
-
-</details>
 
 ---
 
