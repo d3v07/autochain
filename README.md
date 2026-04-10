@@ -6,101 +6,191 @@ Built as a TypeScript monorepo with Next.js, Fastify, SQLite, and Drizzle ORM.
 
 ---
 
-## Customer Portal
+## Product Tour
 
-Customers manage orders, track deliveries, review invoices, and interact with an AI assistant that surfaces insights from their supply chain data.
+The platform is split across three role-based portals. The assistant is persistent in every view, so the desktop captures work better as linked thumbnails than full-width inline images.
 
-### Dashboard
-Overview of orders, outstanding balances, delivery tracking, and AI-generated insights with a visual analytics studio.
+Click any thumbnail to open the full-size screenshot.
 
-![Customer Dashboard](docs/screenshots/02-customer-dashboard.png)
+### Customer Portal
 
-### Delivery Tracker & Visual Insights
-Real-time freight status with ETA tracking. The visual insights studio generates charts from natural language prompts — savings analysis, supplier mix, freight activity.
+Customers manage orders, track deliveries, review invoices, and work alongside an AI assistant that surfaces supply chain insights.
 
-![Delivery & Insights](docs/screenshots/03-delivery-insights.png)
+Core areas: dashboard, delivery tracking, visual insights, orders, invoices, products, documents, workflows, AI insights, and EDI monitoring.
 
-### Orders
-Full order lifecycle from draft to delivery. AI summary highlights pending shipments and order totals at a glance.
+<details>
+<summary><strong>Open customer screenshots</strong></summary>
 
-![Orders](docs/screenshots/04-orders.png)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/01-login.png">
+        <img src="docs/screenshots/01-login.png" alt="Login" width="100%" />
+      </a><br />
+      <strong>Login</strong><br />
+      Demo sign-in entry point for all three roles.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/02-customer-dashboard.png">
+        <img src="docs/screenshots/02-customer-dashboard.png" alt="Customer Dashboard" width="100%" />
+      </a><br />
+      <strong>Dashboard</strong><br />
+      Orders, balances, delivery tracking, and analytics studio.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/03-delivery-insights.png">
+        <img src="docs/screenshots/03-delivery-insights.png" alt="Delivery Tracker and Visual Insights" width="100%" />
+      </a><br />
+      <strong>Delivery Tracker &amp; Visual Insights</strong><br />
+      ETA tracking and prompt-driven chart generation.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/04-orders.png">
+        <img src="docs/screenshots/04-orders.png" alt="Orders" width="100%" />
+      </a><br />
+      <strong>Orders</strong><br />
+      Draft-to-delivery order management with AI summaries.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/05-invoices.png">
+        <img src="docs/screenshots/05-invoices.png" alt="Invoices" width="100%" />
+      </a><br />
+      <strong>Invoices</strong><br />
+      Payment status, overdue alerts, and quick actions.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/06-products.png">
+        <img src="docs/screenshots/06-products.png" alt="Products" width="100%" />
+      </a><br />
+      <strong>Products</strong><br />
+      Catalog browsing with stock levels and pricing.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/07-documents.png">
+        <img src="docs/screenshots/07-documents.png" alt="Documents" width="100%" />
+      </a><br />
+      <strong>Documents</strong><br />
+      Versioned AI-generated reports, agreements, and briefs.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/08-workflows.png">
+        <img src="docs/screenshots/08-workflows.png" alt="Workflows" width="100%" />
+      </a><br />
+      <strong>Workflows</strong><br />
+      Approval-based automation with autonomous execution options.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/09-insights.png">
+        <img src="docs/screenshots/09-insights.png" alt="AI Insights" width="100%" />
+      </a><br />
+      <strong>AI Insights</strong><br />
+      Signals from order patterns, freight, aging, and inventory.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/10-edi.png">
+        <img src="docs/screenshots/10-edi.png" alt="EDI Log" width="100%" />
+      </a><br />
+      <strong>EDI Log</strong><br />
+      Purchase order, invoice, and shipping transaction history.
+    </td>
+  </tr>
+</table>
 
-### Invoices
-Invoice tracking with overdue alerts, payment status, and one-click payment actions.
+</details>
 
-![Invoices](docs/screenshots/05-invoices.png)
+### Vendor Portal
 
-### Products
-Product catalog with window, door, glass, hardware, and weatherstripping categories. Real-time inventory levels and pricing.
+Vendors handle inbound purchase orders, catalog availability, outbound freight, and invoice submission.
 
-![Products](docs/screenshots/06-products.png)
+Core areas: vendor dashboard, purchase orders and freight, catalog management, and invoice processing.
 
-### Documents
-AI-generated reports, agreements, and briefs linked to assistant sessions. Version-controlled with markdown content.
+<details>
+<summary><strong>Open vendor screenshots</strong></summary>
 
-![Documents](docs/screenshots/07-documents.png)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/11-vendor-dashboard.png">
+        <img src="docs/screenshots/11-vendor-dashboard.png" alt="Vendor Dashboard" width="100%" />
+      </a><br />
+      <strong>Vendor Dashboard</strong><br />
+      Reliability score, PO summary, and follow-up actions.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/12-vendor-purchase-orders.png">
+        <img src="docs/screenshots/12-vendor-purchase-orders.png" alt="Purchase Orders and Freight" width="100%" />
+      </a><br />
+      <strong>Purchase Orders &amp; Freight</strong><br />
+      Line items, carrier updates, and delivery tracking.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/13-vendor-catalog.png">
+        <img src="docs/screenshots/13-vendor-catalog.png" alt="Vendor Catalog" width="100%" />
+      </a><br />
+      <strong>Vendor Catalog</strong><br />
+      Lead times, MOQs, stock constraints, and availability controls.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/14-vendor-invoices.png">
+        <img src="docs/screenshots/14-vendor-invoices.png" alt="Vendor Invoices" width="100%" />
+      </a><br />
+      <strong>Vendor Invoices</strong><br />
+      PO-linked invoice workflow from pending to paid.
+    </td>
+  </tr>
+</table>
 
-### Workflows
-Multi-step workflow automation — invoice review, inventory reorder suggestions, agreement drafting. Approve, reject, or let the AI agent execute autonomously.
+</details>
 
-![Workflows](docs/screenshots/08-workflows.png)
+### Admin Portal
 
-### AI Insights
-Actionable intelligence surfaced from order patterns, invoice aging, freight lanes, and inventory levels.
+Platform administrators manage users, sessions, and cross-account visibility across the full system.
 
-![AI Insights](docs/screenshots/09-insights.png)
+Core areas: global dashboard, user management, and session monitoring.
 
-### EDI Log
-Electronic Data Interchange transaction log for purchase orders, invoices, and shipping notices.
+<details>
+<summary><strong>Open admin screenshots</strong></summary>
 
-![EDI Log](docs/screenshots/10-edi.png)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/15-admin-dashboard.png">
+        <img src="docs/screenshots/15-admin-dashboard.png" alt="Admin Dashboard" width="100%" />
+      </a><br />
+      <strong>Admin Dashboard</strong><br />
+      Revenue, order volume, active users, and cross-customer activity.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/16-admin-users.png">
+        <img src="docs/screenshots/16-admin-users.png" alt="Admin Users" width="100%" />
+      </a><br />
+      <strong>User Management</strong><br />
+      Role assignment, status control, and feature flags.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/17-admin-sessions.png">
+        <img src="docs/screenshots/17-admin-sessions.png" alt="Admin Sessions" width="100%" />
+      </a><br />
+      <strong>Session Management</strong><br />
+      Active sessions, IP addresses, user agents, and revocation.
+    </td>
+    <td width="50%"></td>
+  </tr>
+</table>
 
----
-
-## Vendor Portal
-
-Vendors manage inbound purchase orders, update catalog availability, track outbound shipments, and handle invoicing.
-
-### Vendor Dashboard
-Reliability score, active PO summary, recommended follow-up actions, and recent order activity.
-
-![Vendor Dashboard](docs/screenshots/11-vendor-dashboard.png)
-
-### Purchase Orders & Freight
-PO detail with line items, freight creation, carrier tracking, and delivery status updates.
-
-![Purchase Orders](docs/screenshots/12-vendor-purchase-orders.png)
-
-### Vendor Catalog
-Manage product availability, lead times, minimum order quantities, and stock constraints.
-
-![Vendor Catalog](docs/screenshots/13-vendor-catalog.png)
-
-### Vendor Invoices
-Submit and track invoices against purchase orders. Status workflow: pending, approved, disputed, paid.
-
-![Vendor Invoices](docs/screenshots/14-vendor-invoices.png)
-
----
-
-## Admin Portal
-
-Platform administrators manage all customers, users, sessions, and cross-account order visibility.
-
-### Admin Dashboard
-Aggregate metrics across all accounts — total revenue, order volume, active users, with a cross-customer order table.
-
-![Admin Dashboard](docs/screenshots/15-admin-dashboard.png)
-
-### User Management
-Manage all platform users across customer and vendor accounts. Role assignment, status control, and feature flags.
-
-![Admin Users](docs/screenshots/16-admin-users.png)
-
-### Session Management
-Active session monitoring with IP addresses, user agents, and revocation controls.
-
-![Admin Sessions](docs/screenshots/17-admin-sessions.png)
+</details>
 
 ---
 
