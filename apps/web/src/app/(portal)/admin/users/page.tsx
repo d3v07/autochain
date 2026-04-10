@@ -45,8 +45,8 @@ export default function AdminUsersPage() {
     if (!token || user?.role !== "admin") return;
 
     const [usersRes, customersRes] = await Promise.all([
-      api<{ data: AdminUser[] }>("/api/admin/users?limit=200", { token }),
-      api<{ data: CustomerOption[] }>("/api/customers?limit=200", { token }),
+      api<{ data: AdminUser[] }>("/api/admin/users?limit=100", { token }),
+      api<{ data: CustomerOption[] }>("/api/customers?limit=100", { token }),
     ]);
 
     setUsers(usersRes.data);

@@ -47,7 +47,7 @@ export default function DocumentsPage() {
   async function loadDocuments() {
     if (!token) return;
     const res = await api<{ data: DocumentRecord[] }>(
-      "/api/documents?limit=200",
+      "/api/documents?limit=100",
       {
         token,
       },

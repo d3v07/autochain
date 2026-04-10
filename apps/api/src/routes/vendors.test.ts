@@ -3,6 +3,7 @@ import {
   createDb,
   customers,
   hashSync,
+  purchaseOrders,
   users,
   vendorProfiles,
 } from "@autochain/db";
@@ -84,6 +85,23 @@ describe("vendor routes", () => {
       ])
       .run();
 
+    const vendorUser = db
+      .select()
+      .from(users)
+      .all()
+      .find((entry) => entry.email === "ops@northstarextrusions.com");
+
+    db.insert(purchaseOrders)
+      .values({
+        vendorCustomerId: insertedCustomers[1]!.id,
+        issuedByUserId: vendorUser!.id,
+        purchaseOrderNumber: "PO-2001",
+        status: "confirmed",
+        expectedShipDate: "2026-04-15",
+        total: 12600,
+      })
+      .run();
+
     app = await buildApp({ db });
   });
 
@@ -158,6 +176,42 @@ describe("vendor routes", () => {
           accountType: "vendor",
         },
       ],
+    });
+  });
+
+  it("lets vendors create and update freight tracking for a purchase order", async () => {
+    const token = await login("ops@northstarextrusions.com");
+
+    const update = await app.inject({
+      method: "PUT",
+      url: "/api/vendors/purchase-orders/1/shipment",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        carrier: "XPO Logistics",
+        trackingNumber: "XPO-7781",
+        status: "in_transit",
+        estimatedDelivery: "2026-04-18",
+        note: "Freight left the dock.",
+        location: "Cleveland, OH",
+      },
+    });
+
+    expect(update.statusCode).toBe(200);
+    expect(update.json()).toMatchObject({
+      success: true,
+      data: {
+        purchaseOrderId: 1,
+        carrier: "XPO Logistics",
+        trackingNumber: "XPO-7781",
+        status: "in_transit",
+        purchaseOrderStatus: "shipped",
+        events: [
+          expect.objectContaining({
+            description: "Freight left the dock.",
+            location: "Cleveland, OH",
+          }),
+        ],
+      },
     });
   });
 });

@@ -37,6 +37,7 @@ import type {
   AiStateResponse,
   AssistantSession,
   AssistantWorkspaceOverview,
+  WorkflowAgentRole,
   WorkflowRun,
   WorkflowStep,
 } from "@autochain/shared";
@@ -63,6 +64,28 @@ type TextMessage = {
 type WorkspacePayload = AiStateResponse & {
   overview: AssistantWorkspaceOverview;
 };
+
+type AssistantResizeState =
+  | {
+      kind: "docked";
+      startX: number;
+      startWidth: number;
+    }
+  | {
+      kind: "workspaceWidth";
+      startX: number;
+      startWidth: number;
+    }
+  | {
+      kind: "workspaceHeight";
+      startY: number;
+      startHeight: number;
+    }
+  | {
+      kind: "workspaceRail";
+      startX: number;
+      startWidth: number;
+    };
 
 type VoiceRecognition = {
   continuous: boolean;
@@ -92,6 +115,15 @@ declare global {
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const ASSISTANT_DOCKED_WIDTH_KEY = "evo_assistant_docked_width_v1";
+const ASSISTANT_WORKSPACE_WIDTH_KEY = "evo_assistant_workspace_width_v1";
+const ASSISTANT_WORKSPACE_HEIGHT_KEY = "evo_assistant_workspace_height_v1";
+const ASSISTANT_WORKSPACE_RAIL_WIDTH_KEY =
+  "evo_assistant_workspace_rail_width_v1";
+const DEFAULT_DOCKED_WIDTH = 460;
+const DEFAULT_WORKSPACE_WIDTH = 1040;
+const DEFAULT_WORKSPACE_HEIGHT = 860;
+const DEFAULT_WORKSPACE_RAIL_WIDTH = 296;
 
 const STANDARD_SUGGESTED_PROMPTS = [
   "What's my best-selling product this quarter?",
@@ -114,6 +146,7 @@ const CUSTOMER_AGENTIC_PROMPTS = [
   "Generate a monthly summary",
   "Review low-stock products and suggest reorders",
   "Draft a customer agreement",
+  "Run a multi-agent control tower review across invoices and inventory",
 ];
 
 const ADMIN_AGENTIC_PROMPTS = [
@@ -121,6 +154,7 @@ const ADMIN_AGENTIC_PROMPTS = [
   "Generate a top customer risk report",
   "Prepare an operator follow-up email draft",
   "Build a weekly operations summary",
+  "Run a multi-agent incident cell for risky sessions and operator outreach",
 ];
 
 const VENDOR_AGENTIC_PROMPTS = [
@@ -128,7 +162,20 @@ const VENDOR_AGENTIC_PROMPTS = [
   "Check vendor invoices and prepare a finance brief",
   "Summarize open purchase orders and shipments",
   "Draft a supplier agreement addendum",
+  "Run a multi-agent vendor war room across purchase orders and invoices",
 ];
+
+const AGENT_ROLE_LABELS: Record<WorkflowAgentRole, string> = {
+  orchestrator: "Orchestrator",
+  ops_analyst: "Ops Analyst",
+  finance_analyst: "Finance Analyst",
+  inventory_analyst: "Inventory Analyst",
+  supplier_manager: "Supplier Manager",
+  logistics_coordinator: "Logistics Coordinator",
+  document_specialist: "Document Specialist",
+  risk_guardian: "Risk Guardian",
+  comms_coordinator: "Comms Coordinator",
+};
 
 const VOICE_SUGGESTED_PROMPTS = [
   "Give me a 30 second summary of overdue invoices",
@@ -315,6 +362,10 @@ function roleLabel(role: AiStateResponse["role"] | undefined) {
   }
 }
 
+function getAgentRoleLabel(role: WorkflowAgentRole | null | undefined) {
+  return role ? AGENT_ROLE_LABELS[role] : null;
+}
+
 function nextPlanActionCopy(plan: ActivePlan | null) {
   if (!plan) return "";
   if (plan.status === "planned") {
@@ -351,6 +402,10 @@ function getPrimaryPlanAction(plan: ActivePlan | null) {
 
 function modeLabel(mode: AiStateResponse["mode"] | undefined) {
   return mode === "video" ? "visual" : (mode ?? "text");
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function getShellClasses(shellMode: AssistantShellMode) {
@@ -415,6 +470,17 @@ export function AssistantWorkspace({
     previewUrl?: string;
   } | null>(null);
   const [agenticTask, setAgenticTask] = useState("");
+  const [dockedWidth, setDockedWidth] = useState(DEFAULT_DOCKED_WIDTH);
+  const [workspaceWidth, setWorkspaceWidth] = useState(DEFAULT_WORKSPACE_WIDTH);
+  const [workspaceHeight, setWorkspaceHeight] = useState(
+    DEFAULT_WORKSPACE_HEIGHT,
+  );
+  const [workspaceRailWidth, setWorkspaceRailWidth] = useState(
+    DEFAULT_WORKSPACE_RAIL_WIDTH,
+  );
+  const [resizeState, setResizeState] = useState<AssistantResizeState | null>(
+    null,
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<VoiceRecognition | null>(null);
@@ -478,6 +544,17 @@ export function AssistantWorkspace({
     () => getPrimaryPlanAction(activePlan),
     [activePlan],
   );
+  const isDockedShell = shellMode === "docked";
+  const showWorkspaceRail = shellMode === "workspace";
+  const assistantShellStyle =
+    shellMode === "docked"
+      ? { width: `min(${dockedWidth}px, calc(100vw - 6rem))` }
+      : shellMode === "workspace"
+        ? {
+            width: `min(${workspaceWidth}px, calc(100vw - 2rem))`,
+            height: `min(${workspaceHeight}px, calc(100vh - 2rem))`,
+          }
+        : undefined;
 
   const sessionByMode = useMemo(() => {
     const grouped = new Map<AiStateResponse["mode"], AssistantSession>();
@@ -1250,6 +1327,141 @@ export function AssistantWorkspace({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedDockedWidth = Number(
+      window.localStorage.getItem(ASSISTANT_DOCKED_WIDTH_KEY),
+    );
+    const storedWorkspaceWidth = Number(
+      window.localStorage.getItem(ASSISTANT_WORKSPACE_WIDTH_KEY),
+    );
+    const storedWorkspaceHeight = Number(
+      window.localStorage.getItem(ASSISTANT_WORKSPACE_HEIGHT_KEY),
+    );
+    const storedWorkspaceRailWidth = Number(
+      window.localStorage.getItem(ASSISTANT_WORKSPACE_RAIL_WIDTH_KEY),
+    );
+
+    if (Number.isFinite(storedDockedWidth) && storedDockedWidth > 0) {
+      setDockedWidth(storedDockedWidth);
+    }
+    if (Number.isFinite(storedWorkspaceWidth) && storedWorkspaceWidth > 0) {
+      setWorkspaceWidth(storedWorkspaceWidth);
+    }
+    if (Number.isFinite(storedWorkspaceHeight) && storedWorkspaceHeight > 0) {
+      setWorkspaceHeight(storedWorkspaceHeight);
+    }
+    if (
+      Number.isFinite(storedWorkspaceRailWidth) &&
+      storedWorkspaceRailWidth > 0
+    ) {
+      setWorkspaceRailWidth(storedWorkspaceRailWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ASSISTANT_DOCKED_WIDTH_KEY,
+      String(dockedWidth),
+    );
+  }, [dockedWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ASSISTANT_WORKSPACE_WIDTH_KEY,
+      String(workspaceWidth),
+    );
+  }, [workspaceWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ASSISTANT_WORKSPACE_HEIGHT_KEY,
+      String(workspaceHeight),
+    );
+  }, [workspaceHeight]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      ASSISTANT_WORKSPACE_RAIL_WIDTH_KEY,
+      String(workspaceRailWidth),
+    );
+  }, [workspaceRailWidth]);
+
+  useEffect(() => {
+    if (!resizeState || typeof window === "undefined") return;
+
+    const currentResize = resizeState;
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+
+    function handlePointerMove(event: PointerEvent) {
+      if (currentResize.kind === "docked") {
+        const nextWidth = clamp(
+          currentResize.startWidth + (currentResize.startX - event.clientX),
+          380,
+          Math.max(520, window.innerWidth - 280),
+        );
+        setDockedWidth(nextWidth);
+        document.body.style.cursor = "col-resize";
+        return;
+      }
+
+      if (currentResize.kind === "workspaceWidth") {
+        const nextWidth = clamp(
+          currentResize.startWidth + (currentResize.startX - event.clientX),
+          780,
+          window.innerWidth - 32,
+        );
+        setWorkspaceWidth(nextWidth);
+        document.body.style.cursor = "col-resize";
+        return;
+      }
+
+      if (currentResize.kind === "workspaceHeight") {
+        const nextHeight = clamp(
+          currentResize.startHeight + (event.clientY - currentResize.startY),
+          620,
+          window.innerHeight - 32,
+        );
+        setWorkspaceHeight(nextHeight);
+        document.body.style.cursor = "row-resize";
+        return;
+      }
+
+      const nextRailWidth = clamp(
+        currentResize.startWidth + (event.clientX - currentResize.startX),
+        240,
+        420,
+      );
+      setWorkspaceRailWidth(nextRailWidth);
+      document.body.style.cursor = "col-resize";
+    }
+
+    function handlePointerUp() {
+      setResizeState(null);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    };
+  }, [resizeState]);
+
+  useEffect(() => {
     if (!open || !token) return;
     setAiStateLoading(true);
     void loadWorkspace().finally(() => setAiStateLoading(false));
@@ -1304,7 +1516,9 @@ export function AssistantWorkspace({
     if (aiState?.mode === "voice") {
       return (
         <div className="flex h-full flex-col">
-          <div className="border-b border-border px-5 py-4">
+          <div
+            className={`border-b border-border ${isDockedShell ? "px-4 py-4" : "px-5 py-4"}`}
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -1322,8 +1536,16 @@ export function AssistantWorkspace({
             </div>
           </div>
 
-          <div className="grid flex-1 gap-4 overflow-hidden p-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="flex min-h-0 flex-col rounded border border-border bg-background">
+          <div
+            className={
+              isDockedShell
+                ? "flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-4"
+                : "grid flex-1 gap-4 overflow-hidden p-5 lg:grid-cols-[minmax(0,1fr)_280px]"
+            }
+          >
+            <div
+              className={`flex min-h-0 flex-col rounded border border-border bg-background ${isDockedShell ? "min-h-[280px]" : ""}`}
+            >
               <div className="border-b border-border px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge
@@ -1383,7 +1605,11 @@ export function AssistantWorkspace({
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div
+              className={
+                isDockedShell ? "grid gap-4 md:grid-cols-2" : "space-y-4"
+              }
+            >
               <div className="rounded border border-border bg-background p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Controls
@@ -1470,7 +1696,9 @@ export function AssistantWorkspace({
     if (aiState?.mode === "video") {
       return (
         <div className="flex h-full flex-col">
-          <div className="border-b border-border px-5 py-4">
+          <div
+            className={`border-b border-border ${isDockedShell ? "px-4 py-4" : "px-5 py-4"}`}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
               Visual Session
             </p>
@@ -1483,7 +1711,13 @@ export function AssistantWorkspace({
             </p>
           </div>
 
-          <div className="grid flex-1 gap-4 overflow-hidden p-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div
+            className={
+              isDockedShell
+                ? "flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-4"
+                : "grid flex-1 gap-4 overflow-hidden p-5 lg:grid-cols-[minmax(0,1fr)_280px]"
+            }
+          >
             <div className="flex min-h-0 flex-col rounded border border-border bg-background">
               <div className="grid gap-3 border-b border-border p-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm text-foreground">
@@ -1600,7 +1834,11 @@ export function AssistantWorkspace({
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div
+              className={
+                isDockedShell ? "grid gap-4 md:grid-cols-2" : "space-y-4"
+              }
+            >
               <div className="rounded border border-border bg-background p-4">
                 <button
                   type="button"
@@ -1661,7 +1899,9 @@ export function AssistantWorkspace({
     if (aiState?.mode === "agentic") {
       return (
         <div className="flex h-full flex-col">
-          <div className="border-b border-border px-5 py-4">
+          <div
+            className={`border-b border-border ${isDockedShell ? "px-4 py-4" : "px-5 py-4"}`}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
               Agentic Workflow
             </p>
@@ -1674,8 +1914,20 @@ export function AssistantWorkspace({
             </p>
           </div>
 
-          <div className="grid flex-1 gap-4 overflow-hidden p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="flex min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+          <div
+            className={
+              isDockedShell
+                ? "flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto p-4"
+                : "grid flex-1 gap-4 overflow-hidden p-5 xl:grid-cols-[minmax(0,1fr)_320px]"
+            }
+          >
+            <div
+              className={
+                isDockedShell
+                  ? "flex min-h-0 flex-col gap-4"
+                  : "flex min-h-0 flex-col gap-4 overflow-y-auto pr-1"
+              }
+            >
               <div className="rounded border border-border bg-background p-4">
                 <form
                   onSubmit={(event) => {
@@ -1765,6 +2017,38 @@ export function AssistantWorkspace({
                     </div>
                   </div>
 
+                  {activePlan.orchestration && (
+                    <div className="mt-4 rounded border border-ai/20 bg-surface px-3 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-ai-foreground">
+                            Team Orchestration
+                          </p>
+                          <p className="mt-1 text-sm text-foreground">
+                            {activePlan.orchestration.summary}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-ai-light/50 px-2 py-1 text-[11px] font-medium text-ai-foreground">
+                          {
+                            AGENT_ROLE_LABELS[
+                              activePlan.orchestration.coordinatorRole
+                            ]
+                          }
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {activePlan.orchestration.agents.map((agent) => (
+                          <span
+                            key={agent.role}
+                            className="rounded-full bg-background px-2 py-1 text-[11px] font-medium text-foreground"
+                          >
+                            {agent.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 space-y-2">
                     {activePlan.steps.map((step, index) => {
                       const StepIcon = ACTION_TYPE_META[step.actionType].icon;
@@ -1805,9 +2089,19 @@ export function AssistantWorkspace({
                                 <StatusBadge status={step.status} />
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
+                                {step.agentRole && (
+                                  <span className="rounded-full bg-ai-light/50 px-2 py-0.5 text-[11px] font-medium text-ai-foreground">
+                                    {getAgentRoleLabel(step.agentRole)}
+                                  </span>
+                                )}
                                 {step.requiresApproval && (
                                   <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                                     Approval required
+                                  </span>
+                                )}
+                                {step.parallelGroup && (
+                                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                    {step.parallelGroup}
                                   </span>
                                 )}
                                 {step.status === "pending" && (
@@ -1817,6 +2111,13 @@ export function AssistantWorkspace({
                                   </span>
                                 )}
                               </div>
+                              {step.dependsOnStepNumbers &&
+                                step.dependsOnStepNumbers.length > 0 && (
+                                  <p className="mt-2 text-[11px] text-muted">
+                                    Depends on steps{" "}
+                                    {step.dependsOnStepNumbers.join(", ")}
+                                  </p>
+                                )}
                               {step.lastError && (
                                 <p className="mt-2 text-[11px] text-danger">
                                   {step.lastError}
@@ -1881,7 +2182,13 @@ export function AssistantWorkspace({
               )}
             </div>
 
-            <div className="space-y-4 overflow-y-auto">
+            <div
+              className={
+                isDockedShell
+                  ? "grid gap-4 md:grid-cols-2"
+                  : "space-y-4 overflow-y-auto"
+              }
+            >
               <div className="rounded border border-border bg-background p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Run Log
@@ -2053,9 +2360,57 @@ export function AssistantWorkspace({
         <div className="fixed inset-0 z-40 bg-black/25" onClick={onClose} />
       )}
       <div className={getShellClasses(shellMode)}>
+        {isDockedShell && (
+          <button
+            type="button"
+            aria-label="Resize docked assistant"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setResizeState({
+                kind: "docked",
+                startX: event.clientX,
+                startWidth: dockedWidth,
+              });
+            }}
+            className="absolute inset-y-0 left-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize bg-transparent xl:block"
+          />
+        )}
+        {showWorkspaceRail && (
+          <>
+            <button
+              type="button"
+              aria-label="Resize workspace width"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setResizeState({
+                  kind: "workspaceWidth",
+                  startX: event.clientX,
+                  startWidth: workspaceWidth,
+                });
+              }}
+              className="absolute inset-y-0 left-0 z-20 hidden w-3 -translate-x-1/2 cursor-col-resize bg-transparent xl:block"
+            />
+            <button
+              type="button"
+              aria-label="Resize workspace height"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setResizeState({
+                  kind: "workspaceHeight",
+                  startY: event.clientY,
+                  startHeight: workspaceHeight,
+                });
+              }}
+              className="absolute inset-x-0 bottom-0 z-20 hidden h-3 translate-y-1/2 cursor-row-resize bg-transparent xl:block"
+            />
+          </>
+        )}
         <div className="flex h-full overflow-hidden">
-          {shellMode !== "docked" && (
-            <aside className="hidden w-64 shrink-0 border-r border-border bg-background/70 xl:flex xl:flex-col">
+          {showWorkspaceRail && (
+            <aside
+              className="hidden shrink-0 border-r border-border bg-background/70 xl:flex xl:flex-col"
+              style={{ width: workspaceRailWidth }}
+            >
               <div className="border-b border-border px-4 py-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                   Assistant Workspace
@@ -2256,9 +2611,26 @@ export function AssistantWorkspace({
               </div>
             </aside>
           )}
+          {showWorkspaceRail && (
+            <button
+              type="button"
+              aria-label="Resize workspace rail"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setResizeState({
+                  kind: "workspaceRail",
+                  startX: event.clientX,
+                  startWidth: workspaceRailWidth,
+                });
+              }}
+              className="hidden w-3 shrink-0 cursor-col-resize bg-transparent xl:block"
+            />
+          )}
 
           <section className="flex min-w-0 flex-1 flex-col">
-            <div className="border-b border-border px-5 py-4">
+            <div
+              className={`border-b border-border ${isDockedShell ? "px-4 py-4" : "px-5 py-4"}`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -2268,11 +2640,25 @@ export function AssistantWorkspace({
                     </span>
                   </div>
                   {aiState && (
-                    <p className="mt-1 text-[11px] text-muted">
-                      {roleLabel(aiState.role)} · {modeLabel(aiState.mode)} ·{" "}
-                      {aiState.autonomy}
-                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
+                        {roleLabel(aiState.role)}
+                      </span>
+                      <span className="rounded-full border border-ai/20 bg-ai-light/40 px-2.5 py-1 text-[11px] font-medium text-ai-foreground">
+                        {modeLabel(aiState.mode)}
+                      </span>
+                      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-muted">
+                        {aiState.autonomy}
+                      </span>
+                    </div>
                   )}
+                  <p className="mt-2 text-xs text-muted">
+                    {isDockedShell
+                      ? "Compact rail for quick work. Drag the left edge to resize."
+                      : shellMode === "workspace"
+                        ? "Dedicated assistant canvas. Drag the outer frame or workspace divider to resize."
+                        : "Full focus view for longer assistant sessions."}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -2322,12 +2708,24 @@ export function AssistantWorkspace({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+              <div
+                className={
+                  isDockedShell
+                    ? "mt-4 space-y-3"
+                    : "mt-4 grid gap-3 lg:grid-cols-[1fr_auto]"
+                }
+              >
                 <div>
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
                     Autonomy
                   </p>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div
+                    className={
+                      isDockedShell
+                        ? "grid grid-cols-3 gap-2"
+                        : "grid grid-cols-3 gap-1.5"
+                    }
+                  >
                     {AUTONOMY_ITEMS.map((item) => {
                       const active = aiState?.autonomy === item.value;
                       const enabled =
@@ -2349,19 +2747,29 @@ export function AssistantWorkspace({
                           }`}
                         >
                           <p className="text-xs font-medium">{item.label}</p>
-                          <p className="mt-1 text-[10px] leading-4 opacity-80">
-                            {item.helper}
-                          </p>
+                          {!isDockedShell && (
+                            <p className="mt-1 text-[10px] leading-4 opacity-80">
+                              {item.helper}
+                            </p>
+                          )}
                         </button>
                       );
                     })}
                   </div>
                 </div>
-                <div className="min-w-0 lg:w-[360px]">
+                <div
+                  className={isDockedShell ? "min-w-0" : "min-w-0 lg:w-[360px]"}
+                >
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
                     Mode
                   </p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div
+                    className={
+                      isDockedShell
+                        ? "grid grid-cols-2 gap-2"
+                        : "grid grid-cols-2 gap-1.5"
+                    }
+                  >
                     {MODE_ITEMS.map((item) => {
                       const Icon = item.icon;
                       const isAgentic = item.value === "agentic";
@@ -2388,9 +2796,11 @@ export function AssistantWorkspace({
                           <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                           <div>
                             <p className="text-xs font-medium">{item.label}</p>
-                            <p className="mt-1 text-[10px] leading-4 opacity-80">
-                              {item.helper}
-                            </p>
+                            {!isDockedShell && (
+                              <p className="mt-1 text-[10px] leading-4 opacity-80">
+                                {item.helper}
+                              </p>
+                            )}
                           </div>
                         </button>
                       );

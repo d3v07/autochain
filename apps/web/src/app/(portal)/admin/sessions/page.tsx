@@ -33,7 +33,7 @@ export default function AdminSessionsPage() {
   async function loadSessions() {
     if (!token || user?.role !== "admin") return;
     const res = await api<{ data: AdminSession[] }>(
-      "/api/admin/sessions?limit=200",
+      "/api/admin/sessions?limit=100",
       { token },
     );
     setSessions(res.data);

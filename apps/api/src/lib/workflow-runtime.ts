@@ -1,8 +1,6 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Db } from "@autochain/db";
 import {
-  customers,
-  invoices,
   workflowArtifacts,
   workflowCheckpoints,
   workflowEvents,
@@ -10,8 +8,16 @@ import {
   workflowSteps,
   userSessions,
 } from "@autochain/db";
+import {
+  WorkflowAgentRole as WorkflowAgentRoleSchema,
+  WorkflowOrchestrationStrategy as WorkflowOrchestrationStrategySchema,
+} from "@autochain/shared";
 import type {
   SandboxAction,
+  WorkflowAgent,
+  WorkflowAgentRole,
+  WorkflowOrchestration,
+  WorkflowOrchestrationStrategy,
   WorkflowArtifact,
   WorkflowEvent,
   WorkflowRun,
@@ -28,6 +34,10 @@ const WORKFLOW_TIMEOUT_SECONDS = Number(
   process.env.WORKFLOW_TIMEOUT_SECONDS ?? 900,
 );
 
+const WORKFLOW_AGENT_ROLES = WorkflowAgentRoleSchema.options;
+const WORKFLOW_ORCHESTRATION_STRATEGIES =
+  WorkflowOrchestrationStrategySchema.options;
+
 type PlannedStep = {
   title: string;
   actionKey: string;
@@ -35,11 +45,15 @@ type PlannedStep = {
   target: string | null;
   payload: Record<string, unknown>;
   requiresApproval: boolean;
+  agentRole: WorkflowAgentRole | null;
+  dependsOnStepNumbers: number[];
+  parallelGroup: string | null;
 };
 
 type WorkflowDraft = {
   steps: PlannedStep[];
   restrictedActionKeys: string[];
+  orchestration: WorkflowOrchestration | null;
 };
 
 function parseJsonObject(value: string | null | undefined) {
@@ -54,7 +68,406 @@ function parseJsonObject(value: string | null | undefined) {
   }
 }
 
+function isWorkflowAgentRole(value: unknown): value is WorkflowAgentRole {
+  return (
+    typeof value === "string" &&
+    (WORKFLOW_AGENT_ROLES as readonly string[]).includes(value)
+  );
+}
+
+function isWorkflowOrchestrationStrategy(
+  value: unknown,
+): value is WorkflowOrchestrationStrategy {
+  return (
+    typeof value === "string" &&
+    (WORKFLOW_ORCHESTRATION_STRATEGIES as readonly string[]).includes(value)
+  );
+}
+
+function parseNumberArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is number => typeof item === "number" && Number.isFinite(item),
+  );
+}
+
+function parseAssignments(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, WorkflowAgentRole] =>
+        isWorkflowAgentRole(entry[1]),
+    ),
+  );
+}
+
+function parseAgent(value: unknown): WorkflowAgent | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    !isWorkflowAgentRole(candidate.role) ||
+    typeof candidate.label !== "string" ||
+    typeof candidate.objective !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    role: candidate.role,
+    label: candidate.label,
+    objective: candidate.objective,
+    capabilities: Array.isArray(candidate.capabilities)
+      ? candidate.capabilities.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
+  };
+}
+
+function parseOrchestration(value: unknown): WorkflowOrchestration | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    !isWorkflowAgentRole(candidate.coordinatorRole) ||
+    !isWorkflowOrchestrationStrategy(candidate.strategy) ||
+    typeof candidate.summary !== "string"
+  ) {
+    return null;
+  }
+
+  const agents = Array.isArray(candidate.agents)
+    ? candidate.agents
+        .map((item) => parseAgent(item))
+        .filter((item): item is WorkflowAgent => Boolean(item))
+    : [];
+
+  if (agents.length === 0) {
+    return null;
+  }
+
+  return {
+    enabled: candidate.enabled !== false,
+    coordinatorRole: candidate.coordinatorRole,
+    strategy: candidate.strategy,
+    summary: candidate.summary,
+    agents,
+    assignments: parseAssignments(candidate.assignments),
+  };
+}
+
+function getActionDefaultPayload(actionKey: string, task: string) {
+  switch (actionKey) {
+    case "report.generate_monthly":
+      return {
+        documentKind: "report",
+        template: "monthly_summary",
+        task,
+      };
+    case "report.vendor_monthly":
+      return {
+        documentKind: "report",
+        template: "vendor_monthly",
+        task,
+      };
+    case "report.check_overdue_invoices":
+      return {
+        documentKind: "invoice",
+        template: "overdue_invoices",
+        task,
+      };
+    case "report.vendor_invoice_review":
+      return {
+        documentKind: "report",
+        template: "vendor_invoice_review",
+        task,
+      };
+    case "report.inventory_reorder":
+      return {
+        documentKind: "report",
+        template: "inventory_reorder",
+        task,
+      };
+    case "report.vendor_catalog_health":
+      return {
+        documentKind: "report",
+        template: "vendor_catalog_health",
+        task,
+      };
+    case "report.customer_risk":
+      return {
+        documentKind: "report",
+        template: "customer_risk",
+        task,
+      };
+    case "document.generate_agreement":
+      return {
+        documentKind: "agreement",
+        template: "agreement",
+        task,
+      };
+    case "connector.gmail.compose":
+      return {
+        provider: "gmail",
+        task,
+      };
+    case "user.disable":
+    case "session.revoke":
+      return {
+        task,
+        targetRequired: true,
+      };
+    default:
+      return { task };
+  }
+}
+
+function inferAgentRoleForAction(
+  actionKey: string,
+  actionType: SandboxAction["actionType"],
+  orchestration: WorkflowOrchestration,
+) {
+  const availableRoles = new Set(
+    orchestration.agents.map((agent) => agent.role),
+  );
+  const preferredRole =
+    actionKey.includes("invoice") || actionKey.includes("finance")
+      ? "finance_analyst"
+      : actionKey.includes("inventory") ||
+          actionKey.includes("catalog") ||
+          actionKey.includes("products")
+        ? "inventory_analyst"
+        : actionKey.includes("purchase-orders") || actionKey.includes("vendor")
+          ? "supplier_manager"
+          : actionKey.includes("shipment") || actionKey.includes("logistics")
+            ? "logistics_coordinator"
+            : actionKey.includes("agreement") || actionKey.includes("document")
+              ? "document_specialist"
+              : actionKey.includes("risk") || actionKey.includes("session")
+                ? "risk_guardian"
+                : actionType === "connector"
+                  ? "comms_coordinator"
+                  : "ops_analyst";
+
+  if (availableRoles.has(preferredRole)) {
+    return preferredRole;
+  }
+  if (availableRoles.has(orchestration.coordinatorRole)) {
+    return orchestration.coordinatorRole;
+  }
+  return orchestration.agents[0]?.role ?? null;
+}
+
+function applyOrchestrationToSteps(
+  steps: PlannedStep[],
+  orchestration: WorkflowOrchestration | null,
+) {
+  if (!orchestration || !orchestration.enabled || steps.length === 0) {
+    return steps;
+  }
+
+  const assignedSteps: PlannedStep[] = steps.map((step) => ({
+    ...step,
+    agentRole:
+      orchestration.assignments[step.actionKey] ??
+      inferAgentRoleForAction(step.actionKey, step.actionType, orchestration),
+    dependsOnStepNumbers: [] as number[],
+    parallelGroup: null as string | null,
+  }));
+
+  if (
+    orchestration.strategy === "parallel_fanout" &&
+    assignedSteps.length > 2
+  ) {
+    const fanoutSteps = assignedSteps.slice(1, -1);
+
+    if (fanoutSteps.length > 0) {
+      fanoutSteps.forEach((step) => {
+        step.dependsOnStepNumbers = [1];
+        step.parallelGroup = "fanout-1";
+      });
+
+      if (assignedSteps.length > 3) {
+        assignedSteps[assignedSteps.length - 1]!.dependsOnStepNumbers =
+          fanoutSteps.map((_, index) => index + 2);
+      }
+    } else {
+      assignedSteps[1]!.dependsOnStepNumbers = [1];
+    }
+
+    return assignedSteps;
+  }
+
+  return assignedSteps.map((step, index) => ({
+    ...step,
+    dependsOnStepNumbers: index === 0 ? ([] as number[]) : [index],
+  }));
+}
+
+function inferOrchestrationFromTask(
+  task: string,
+  role: "customer" | "vendor" | "admin",
+) {
+  const normalized = task.toLowerCase();
+  const orchestrationRequested =
+    normalized.includes("multi-agent") ||
+    normalized.includes("multi agent") ||
+    normalized.includes("orchestrate") ||
+    normalized.includes("control tower") ||
+    normalized.includes("war room");
+
+  if (!orchestrationRequested) {
+    return null;
+  }
+
+  if (role === "admin" || normalized.includes("risk")) {
+    return {
+      enabled: true,
+      coordinatorRole: "orchestrator" as const,
+      strategy: "parallel_fanout" as const,
+      summary:
+        "Admin orchestration splits investigation across risk, operations, and outreach lanes before consolidation.",
+      agents: [
+        {
+          role: "orchestrator" as const,
+          label: "Orchestrator",
+          objective:
+            "Sequence the investigation and merge cross-functional outputs.",
+          capabilities: ["routing", "handoffs", "checkpointing"],
+        },
+        {
+          role: "risk_guardian" as const,
+          label: "Risk Guardian",
+          objective:
+            "Inspect risky sessions, approvals, and account anomalies.",
+          capabilities: ["risk-review", "session-analysis"],
+        },
+        {
+          role: "ops_analyst" as const,
+          label: "Ops Analyst",
+          objective:
+            "Review account operations context and summarize findings.",
+          capabilities: ["dashboard-review", "reporting"],
+        },
+        {
+          role: "comms_coordinator" as const,
+          label: "Comms Coordinator",
+          objective:
+            "Prepare follow-up outreach once investigation is complete.",
+          capabilities: ["connector-drafts", "operator-briefs"],
+        },
+      ],
+      assignments: {},
+    } satisfies WorkflowOrchestration;
+  }
+
+  if (
+    role === "vendor" ||
+    normalized.includes("purchase order") ||
+    normalized.includes("shipment") ||
+    normalized.includes("supplier")
+  ) {
+    return {
+      enabled: true,
+      coordinatorRole: "orchestrator" as const,
+      strategy: "parallel_fanout" as const,
+      summary:
+        "Vendor orchestration fans out across supplier, logistics, and finance lanes before packaging the operating brief.",
+      agents: [
+        {
+          role: "orchestrator" as const,
+          label: "Orchestrator",
+          objective:
+            "Sequence vendor execution work and coordinate cross-lane handoffs.",
+          capabilities: ["routing", "handoffs", "checkpointing"],
+        },
+        {
+          role: "supplier_manager" as const,
+          label: "Supplier Manager",
+          objective:
+            "Review purchase orders, constraints, and vendor-side follow-up actions.",
+          capabilities: ["purchase-orders", "supplier-follow-up"],
+        },
+        {
+          role: "logistics_coordinator" as const,
+          label: "Logistics Coordinator",
+          objective:
+            "Inspect shipment state, ETA risk, and freight exceptions.",
+          capabilities: ["freight", "shipment-tracking"],
+        },
+        {
+          role: "finance_analyst" as const,
+          label: "Finance Analyst",
+          objective: "Review invoice exposure and payment dependencies.",
+          capabilities: ["invoice-review", "payables"],
+        },
+        {
+          role: "document_specialist" as const,
+          label: "Document Specialist",
+          objective:
+            "Package the final operating brief and supporting artifacts.",
+          capabilities: ["report-generation", "documentation"],
+        },
+      ],
+      assignments: {},
+    } satisfies WorkflowOrchestration;
+  }
+
+  return {
+    enabled: true,
+    coordinatorRole: "orchestrator" as const,
+    strategy: "parallel_fanout" as const,
+    summary:
+      "Customer orchestration splits the review across operations, finance, inventory, and documentation lanes before final handoff.",
+    agents: [
+      {
+        role: "orchestrator" as const,
+        label: "Orchestrator",
+        objective:
+          "Coordinate the review and keep each lane inside the AutoChain sandbox.",
+        capabilities: ["routing", "handoffs", "checkpointing"],
+      },
+      {
+        role: "ops_analyst" as const,
+        label: "Ops Analyst",
+        objective: "Review account and order activity for the current request.",
+        capabilities: ["dashboard-review", "operations"],
+      },
+      {
+        role: "finance_analyst" as const,
+        label: "Finance Analyst",
+        objective:
+          "Inspect invoice or balance exposure for the current request.",
+        capabilities: ["invoice-review", "finance"],
+      },
+      {
+        role: "inventory_analyst" as const,
+        label: "Inventory Analyst",
+        objective:
+          "Review stock, catalog, or reorder implications for the request.",
+        capabilities: ["inventory", "catalog"],
+      },
+      {
+        role: "document_specialist" as const,
+        label: "Document Specialist",
+        objective: "Package outputs into a reusable document or brief.",
+        capabilities: ["report-generation", "documentation"],
+      },
+    ],
+    assignments: {},
+  } satisfies WorkflowOrchestration;
+}
+
 function toWorkflowStep(row: typeof workflowSteps.$inferSelect): WorkflowStep {
+  const payload = parseJsonObject(row.payload);
   return {
     id: row.id,
     stepNumber: row.stepNumber,
@@ -62,13 +475,19 @@ function toWorkflowStep(row: typeof workflowSteps.$inferSelect): WorkflowStep {
     actionKey: row.actionKey,
     actionType: row.actionType,
     target: row.target ?? null,
-    payload: parseJsonObject(row.payload),
+    payload,
     status: row.status,
     requiresApproval: row.requiresApproval,
     retryCount: row.retryCount,
     maxRetries: row.maxRetries,
     lastError: row.lastError ?? null,
     checkpointData: parseJsonObject(row.checkpointData),
+    agentRole: isWorkflowAgentRole(payload.agentRole)
+      ? payload.agentRole
+      : null,
+    dependsOnStepNumbers: parseNumberArray(payload.dependsOnStepNumbers),
+    parallelGroup:
+      typeof payload.parallelGroup === "string" ? payload.parallelGroup : null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -103,11 +522,68 @@ function toWorkflowArtifact(
   };
 }
 
-function buildStepsForTask(
-  task: string,
-  role: "customer" | "vendor" | "admin",
-): WorkflowDraft {
-  const normalized = task.toLowerCase();
+function getRunOrchestration(
+  steps: WorkflowStep[],
+  artifacts: WorkflowArtifact[],
+): WorkflowOrchestration | null {
+  const manifest = artifacts.find(
+    (artifact) => artifact.kind === "orchestration_manifest",
+  );
+
+  if (manifest) {
+    const parsed = parseOrchestration(manifest.data);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const assignedSteps = steps.filter((step) =>
+    isWorkflowAgentRole(step.agentRole),
+  );
+  if (assignedSteps.length === 0) {
+    return null;
+  }
+
+  const agentRoles = [
+    ...new Set(
+      assignedSteps
+        .map((step) => step.agentRole)
+        .filter((role): role is WorkflowAgentRole => isWorkflowAgentRole(role)),
+    ),
+  ];
+  const assignments = Object.fromEntries(
+    assignedSteps
+      .filter((step) => step.agentRole)
+      .map((step) => [step.actionKey, step.agentRole!]),
+  );
+  const strategy = assignedSteps.some((step) => step.parallelGroup)
+    ? "parallel_fanout"
+    : "serial_handoff";
+
+  return {
+    enabled: true,
+    coordinatorRole: "orchestrator",
+    strategy,
+    summary:
+      "Derived orchestration metadata based on the current workflow step assignments.",
+    agents: agentRoles.map((role) => ({
+      role,
+      label: role.replaceAll("_", " "),
+      objective:
+        "Coordinate the assigned sandbox steps for this workflow lane.",
+      capabilities: [],
+    })),
+    assignments,
+  };
+}
+
+function buildStepsForTask(input: {
+  task: string;
+  role: "customer" | "vendor" | "admin";
+  actionKeys?: string[];
+  orchestration?: WorkflowOrchestration | null;
+}): WorkflowDraft {
+  const normalized = input.task.toLowerCase();
   const refersToInvoices =
     normalized.includes("invoice") || normalized.includes("invoices");
   const refersToUnpaidInvoices =
@@ -117,8 +593,11 @@ function buildStepsForTask(
       normalized.includes("pending") ||
       normalized.includes("open") ||
       normalized.includes("outstanding"));
+  const explicitActionKeys = input.actionKeys?.filter(Boolean) ?? [];
   const steps: PlannedStep[] = [];
   const restrictedActionKeys: string[] = [];
+  const orchestration =
+    input.orchestration ?? inferOrchestrationFromTask(input.task, input.role);
 
   const addAction = (
     actionKey: string,
@@ -127,7 +606,7 @@ function buildStepsForTask(
   ) => {
     const action = getSandboxAction(actionKey);
     if (!action) return;
-    if (!action.roles.includes(role)) {
+    if (!action.roles.includes(input.role)) {
       restrictedActionKeys.push(actionKey);
       return;
     }
@@ -137,10 +616,30 @@ function buildStepsForTask(
       actionKey: action.key,
       actionType: action.actionType,
       target: action.route,
-      payload,
+      payload: {
+        ...getActionDefaultPayload(action.key, input.task),
+        ...payload,
+      },
       requiresApproval: action.requiresApproval,
+      agentRole: null,
+      dependsOnStepNumbers: [],
+      parallelGroup: null,
     });
   };
+
+  if (explicitActionKeys.length > 0) {
+    explicitActionKeys.forEach((actionKey) => {
+      const action = getSandboxAction(actionKey);
+      if (!action) return;
+      addAction(action.key, action.label);
+    });
+
+    return {
+      steps: applyOrchestrationToSteps(steps, orchestration),
+      restrictedActionKeys,
+      orchestration,
+    };
+  }
 
   if (
     normalized.includes("monthly") ||
@@ -148,49 +647,52 @@ function buildStepsForTask(
     normalized.includes("summarize")
   ) {
     addAction(
-      role === "admin"
+      input.role === "admin"
         ? "navigate.admin.dashboard"
-        : role === "vendor"
+        : input.role === "vendor"
           ? "navigate.vendor.dashboard"
           : "navigate.dashboard",
       "Open the relevant dashboard for summary context",
     );
     addAction(
-      role === "vendor" ? "report.vendor_monthly" : "report.generate_monthly",
+      input.role === "vendor"
+        ? "report.vendor_monthly"
+        : "report.generate_monthly",
       "Generate the monthly summary document",
       {
         documentKind: "report",
-        template: role === "vendor" ? "vendor_monthly" : "monthly_summary",
-        task,
+        template:
+          input.role === "vendor" ? "vendor_monthly" : "monthly_summary",
       },
     );
   }
 
   if (refersToUnpaidInvoices) {
     addAction(
-      role === "admin"
+      input.role === "admin"
         ? "navigate.admin.dashboard"
-        : role === "vendor"
+        : input.role === "vendor"
           ? "navigate.vendor.invoices"
           : "navigate.invoices",
-      role === "admin"
+      input.role === "admin"
         ? "Open the finance context from the admin dashboard"
-        : role === "vendor"
+        : input.role === "vendor"
           ? "Open the vendor invoice workspace"
           : "Open the invoices workspace",
     );
     addAction(
-      role === "vendor"
+      input.role === "vendor"
         ? "report.vendor_invoice_review"
         : "report.check_overdue_invoices",
-      role === "vendor"
+      input.role === "vendor"
         ? "Generate a vendor invoice review"
         : "Generate an unpaid invoice review",
       {
-        documentKind: role === "vendor" ? "report" : "invoice",
+        documentKind: input.role === "vendor" ? "report" : "invoice",
         template:
-          role === "vendor" ? "vendor_invoice_review" : "overdue_invoices",
-        task,
+          input.role === "vendor"
+            ? "vendor_invoice_review"
+            : "overdue_invoices",
       },
     );
   }
@@ -200,42 +702,42 @@ function buildStepsForTask(
     addAction("document.generate_agreement", "Generate an agreement draft", {
       documentKind: "agreement",
       template: "agreement",
-      task,
     });
   }
 
   if (
     normalized.includes("inventory") ||
     normalized.includes("reorder") ||
-    (role === "vendor" &&
+    (input.role === "vendor" &&
       (normalized.includes("catalog") ||
         normalized.includes("constrained") ||
         normalized.includes("constraint")))
   ) {
     addAction(
-      role === "vendor" ? "navigate.vendor.catalog" : "navigate.products",
-      role === "vendor"
+      input.role === "vendor" ? "navigate.vendor.catalog" : "navigate.products",
+      input.role === "vendor"
         ? "Open the vendor catalog"
         : "Open the product catalog",
     );
     addAction(
-      role === "vendor"
+      input.role === "vendor"
         ? "report.vendor_catalog_health"
         : "report.inventory_reorder",
-      role === "vendor"
+      input.role === "vendor"
         ? "Generate vendor catalog availability and constraint review"
         : "Generate inventory and reorder suggestions",
       {
         documentKind: "report",
         template:
-          role === "vendor" ? "vendor_catalog_health" : "inventory_reorder",
-        task,
+          input.role === "vendor"
+            ? "vendor_catalog_health"
+            : "inventory_reorder",
       },
     );
   }
 
   if (
-    role === "vendor" &&
+    input.role === "vendor" &&
     (normalized.includes("purchase order") ||
       normalized.includes("purchase orders") ||
       normalized.includes("po ") ||
@@ -253,24 +755,21 @@ function buildStepsForTask(
       {
         documentKind: "report",
         template: "vendor_purchase_orders",
-        task,
       },
     );
   }
 
-  if (role === "admin" && normalized.includes("risk")) {
+  if (input.role === "admin" && normalized.includes("risk")) {
     addAction("navigate.admin.sessions", "Open risky session review");
     addAction("report.customer_risk", "Generate the customer risk report", {
       documentKind: "report",
       template: "customer_risk",
-      task,
     });
   }
 
   if (normalized.includes("disable")) {
     addAction("navigate.admin.users", "Open user management");
     addAction("user.disable", "Disable the selected user account", {
-      task,
       targetRequired: true,
     });
   }
@@ -284,47 +783,73 @@ function buildStepsForTask(
   ) {
     addAction("navigate.admin.sessions", "Open session management");
     addAction("session.revoke", "Revoke the selected session", {
-      task,
       targetRequired: true,
     });
   }
 
-  if (role === "admin" && normalized.includes("gmail")) {
-    addAction("connector.gmail.compose", "Prepare a Gmail draft", {
-      provider: "gmail",
-      task,
-    });
+  if (input.role === "admin" && normalized.includes("gmail")) {
+    addAction("connector.gmail.compose", "Prepare a Gmail draft");
   }
 
   if (steps.length === 0) {
     if (restrictedActionKeys.length > 0) {
-      return { steps, restrictedActionKeys };
+      return { steps, restrictedActionKeys, orchestration };
     }
 
     addAction(
-      role === "admin"
+      input.role === "admin"
         ? "navigate.admin.dashboard"
-        : role === "vendor"
+        : input.role === "vendor"
           ? "navigate.vendor.dashboard"
           : "navigate.dashboard",
       "Open the starting workspace",
     );
     addAction(
-      role === "vendor" ? "report.vendor_monthly" : "report.generate_monthly",
+      input.role === "vendor"
+        ? "report.vendor_monthly"
+        : "report.generate_monthly",
       "Generate a reusable operational brief",
       {
         documentKind: "brief",
-        template: role === "vendor" ? "vendor_general_brief" : "general_brief",
-        task,
+        template:
+          input.role === "vendor" ? "vendor_general_brief" : "general_brief",
       },
     );
   }
 
-  return { steps, restrictedActionKeys };
+  return {
+    steps: applyOrchestrationToSteps(steps, orchestration),
+    restrictedActionKeys,
+    orchestration,
+  };
+}
+
+function dependenciesSatisfied(step: WorkflowStep, steps: WorkflowStep[]) {
+  if (!step.dependsOnStepNumbers || step.dependsOnStepNumbers.length === 0) {
+    return true;
+  }
+
+  const stepsByNumber = new Map(
+    steps.map((candidate) => [candidate.stepNumber, candidate]),
+  );
+  return step.dependsOnStepNumbers.every((stepNumber) => {
+    const dependency = stepsByNumber.get(stepNumber);
+    return (
+      dependency?.status === "completed" || dependency?.status === "skipped"
+    );
+  });
+}
+
+function getReadySteps(steps: WorkflowStep[]) {
+  return steps.filter(
+    (step) =>
+      ["pending", "approved"].includes(step.status) &&
+      dependenciesSatisfied(step, steps),
+  );
 }
 
 function getNextExecutableStep(steps: WorkflowStep[]) {
-  return steps.find((step) => ["pending", "approved"].includes(step.status));
+  return getReadySteps(steps)[0];
 }
 
 function getRunStatus(
@@ -350,7 +875,10 @@ function getRunStatus(
 
   const nextStep = getNextExecutableStep(steps);
   if (!nextStep) {
-    return "completed";
+    const unfinishedSteps = steps.filter(
+      (step) => !["completed", "skipped", "cancelled"].includes(step.status),
+    );
+    return unfinishedSteps.length === 0 ? "completed" : run.status;
   }
   if (nextStep.requiresApproval && nextStep.status === "pending") {
     return "waiting_approval";
@@ -432,18 +960,31 @@ export async function createWorkflowRun(input: {
   mode: "text" | "voice" | "video" | "agentic";
   autonomy: "manual" | "ask" | "agent";
   task: string;
+  actionKeys?: string[];
+  orchestration?: WorkflowOrchestration | null;
 }) {
   const now = new Date().toISOString();
   const expiresAt = new Date(
     Date.now() + WORKFLOW_TIMEOUT_SECONDS * 1000,
   ).toISOString();
-  const draft = buildStepsForTask(input.task, input.role);
+  const draft = buildStepsForTask({
+    task: input.task,
+    role: input.role,
+    actionKeys: input.actionKeys,
+    orchestration: input.orchestration,
+  });
   const plannedSteps = draft.steps;
 
   if (plannedSteps.length === 0 && draft.restrictedActionKeys.length > 0) {
     return {
       error:
         "This task requires permissions that are not available for your role",
+    } as const;
+  }
+
+  if (plannedSteps.length === 0) {
+    return {
+      error: "Workflow could not be planned from the requested actions",
     } as const;
   }
 
@@ -480,7 +1021,12 @@ export async function createWorkflowRun(input: {
         actionKey: step.actionKey,
         actionType: step.actionType,
         target: step.target,
-        payload: JSON.stringify(step.payload),
+        payload: JSON.stringify({
+          ...step.payload,
+          agentRole: step.agentRole,
+          dependsOnStepNumbers: step.dependsOnStepNumbers,
+          parallelGroup: step.parallelGroup,
+        }),
         status: "pending" as const,
         requiresApproval: step.requiresApproval,
         retryCount: 0,
@@ -502,8 +1048,20 @@ export async function createWorkflowRun(input: {
       task: input.task,
       stepCount: plannedSteps.length,
       sandbox: "app",
+      orchestration: draft.orchestration,
     },
   );
+
+  if (draft.orchestration) {
+    await addArtifact(
+      input.db,
+      run!.id,
+      null,
+      "orchestration_manifest",
+      "Agent Orchestration",
+      draft.orchestration,
+    );
+  }
 
   if (draft.restrictedActionKeys.length > 0) {
     await addEvent(
@@ -557,6 +1115,7 @@ export function getWorkflowRunById(
     .orderBy(desc(workflowArtifacts.createdAt))
     .all()
     .map(toWorkflowArtifact);
+  const orchestration = getRunOrchestration(steps, artifacts);
 
   return {
     id: run.id,
@@ -576,6 +1135,7 @@ export function getWorkflowRunById(
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     expiresAt: run.expiresAt,
+    orchestration,
     steps,
     events,
     artifacts,
@@ -659,6 +1219,33 @@ export async function cancelWorkflowRun(
 
   await addEvent(db, runId, null, "workflow.cancelled", "Workflow cancelled");
   return getWorkflowRunById(db, runId, role, userId);
+}
+
+function formatStepMessage(prefix: string, step: WorkflowStep) {
+  const actor = step.agentRole
+    ? ` (${step.agentRole.replaceAll("_", " ")})`
+    : "";
+  return `${prefix}${actor}: ${step.title}`;
+}
+
+function getStepBatch(readySteps: WorkflowStep[]) {
+  const [first] = readySteps;
+  if (!first) {
+    return [];
+  }
+
+  if (!first.parallelGroup || first.actionType === "navigate") {
+    return [first];
+  }
+
+  const batch = readySteps.filter(
+    (step) =>
+      step.parallelGroup === first.parallelGroup &&
+      step.actionType !== "navigate" &&
+      step.requiresApproval === first.requiresApproval,
+  );
+
+  return batch.length > 0 ? batch : [first];
 }
 
 async function executeQueryStep(db: Db, run: WorkflowRun, step: WorkflowStep) {
@@ -757,6 +1344,89 @@ async function markStepStatus(
     .run();
 }
 
+async function executeWorkflowStep(
+  db: Db,
+  run: WorkflowRun,
+  step: WorkflowStep,
+) {
+  await markStepStatus(db, step.id, "running");
+  await addEvent(
+    db,
+    run.id,
+    step.id,
+    "step.started",
+    formatStepMessage("Started", step),
+    {
+      agentRole: step.agentRole,
+      parallelGroup: step.parallelGroup,
+    },
+  );
+
+  let clientAction: {
+    type: "navigate";
+    href: string;
+    dataAgentId: string;
+  } | null = null;
+
+  if (step.actionType === "navigate") {
+    const action = getSandboxAction(step.actionKey);
+    clientAction = {
+      type: "navigate",
+      href: step.target ?? action?.route ?? "/dashboard",
+      dataAgentId: action?.dataAgentId ?? "nav-unknown",
+    };
+    await addCheckpoint(db, run.id, step.id, "navigation.completed", {
+      href: clientAction.href,
+    });
+  } else if (step.actionType === "query") {
+    await executeQueryStep(db, run, step);
+  } else if (step.actionType === "generate") {
+    await executeGenerateStep(db, run, step);
+  } else if (step.actionType === "connector") {
+    await addArtifact(db, run.id, step.id, "connector", step.title, {
+      provider: "gmail",
+      status: "not_connected",
+      message: "Connector account is required before running this step.",
+    });
+  } else {
+    throw new Error(
+      "This workflow step requires additional target selection before it can run.",
+    );
+  }
+
+  await markStepStatus(db, step.id, "completed", {
+    lastError: null,
+    checkpointData: JSON.stringify({
+      completedAt: new Date().toISOString(),
+      agentRole: step.agentRole,
+      parallelGroup: step.parallelGroup,
+    }),
+  });
+  db.update(workflowRuns)
+    .set({
+      status: "running",
+      currentStepIndex: step.stepNumber,
+      lastError: null,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(workflowRuns.id, run.id))
+    .run();
+
+  await addEvent(
+    db,
+    run.id,
+    step.id,
+    "step.completed",
+    formatStepMessage("Completed", step),
+    {
+      agentRole: step.agentRole,
+      parallelGroup: step.parallelGroup,
+    },
+  );
+
+  return { clientAction };
+}
+
 export async function runNextWorkflowStep(
   db: Db,
   runId: number,
@@ -769,11 +1439,22 @@ export async function runNextWorkflowStep(
     return { error: "Workflow has been cancelled" };
   if (run.status === "expired") return { error: "Workflow expired" };
 
-  const nextStep = run.steps.find((step) =>
-    ["pending", "approved"].includes(step.status),
-  );
+  const readySteps = getReadySteps(run.steps);
+  const nextStep = readySteps[0];
 
   if (!nextStep) {
+    const unfinishedSteps = run.steps.filter(
+      (step) => !["completed", "skipped", "cancelled"].includes(step.status),
+    );
+
+    if (unfinishedSteps.length > 0) {
+      return {
+        error:
+          "No executable step is ready yet. Review orchestration dependencies or approvals.",
+        run,
+      };
+    }
+
     db.update(workflowRuns)
       .set({ status: "completed", updatedAt: new Date().toISOString() })
       .where(eq(workflowRuns.id, runId))
@@ -800,14 +1481,8 @@ export async function runNextWorkflowStep(
     };
   }
 
-  await markStepStatus(db, nextStep.id, "running");
-  await addEvent(
-    db,
-    runId,
-    nextStep.id,
-    "step.started",
-    `Started: ${nextStep.title}`,
-  );
+  const batch = getStepBatch(readySteps);
+  let activeStep = nextStep;
 
   try {
     let clientAction: {
@@ -815,58 +1490,38 @@ export async function runNextWorkflowStep(
       href: string;
       dataAgentId: string;
     } | null = null;
-    if (nextStep.actionType === "navigate") {
-      const action = getSandboxAction(nextStep.actionKey);
-      clientAction = {
-        type: "navigate",
-        href: nextStep.target ?? action?.route ?? "/dashboard",
-        dataAgentId: action?.dataAgentId ?? "nav-unknown",
-      };
-      await addCheckpoint(db, runId, nextStep.id, "navigation.completed", {
-        href: clientAction.href,
-      });
-    } else if (nextStep.actionType === "query") {
-      await executeQueryStep(db, run, nextStep);
-    } else if (nextStep.actionType === "generate") {
-      await executeGenerateStep(db, run, nextStep);
-    } else if (nextStep.actionType === "connector") {
-      await addArtifact(db, runId, nextStep.id, "connector", nextStep.title, {
-        provider: "gmail",
-        status: "not_connected",
-        message: "Connector account is required before running this step.",
-      });
-    } else {
-      throw new Error(
-        "This workflow step requires additional target selection before it can run.",
-      );
+
+    for (const step of batch) {
+      activeStep = step;
+      const result = await executeWorkflowStep(db, run, step);
+      if (!clientAction && result.clientAction) {
+        clientAction = result.clientAction;
+      }
     }
 
-    await markStepStatus(db, nextStep.id, "completed", {
-      lastError: null,
-      checkpointData: JSON.stringify({ completedAt: new Date().toISOString() }),
-    });
-    db.update(workflowRuns)
-      .set({
-        status: "running",
-        currentStepIndex: nextStep.stepNumber,
-        lastError: null,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(workflowRuns.id, runId))
-      .run();
-
-    await addEvent(
-      db,
-      runId,
-      nextStep.id,
-      "step.completed",
-      `Completed: ${nextStep.title}`,
-    );
+    if (batch.length > 1) {
+      await addEvent(
+        db,
+        runId,
+        null,
+        "workflow.parallel_batch.completed",
+        `Completed ${batch.length} orchestrated steps in parallel lane ${batch[0]!.parallelGroup ?? "default"}`,
+        {
+          parallelGroup: batch[0]!.parallelGroup,
+          stepIds: batch.map((step) => step.id),
+          agentRoles: batch
+            .map((step) => step.agentRole)
+            .filter((value): value is WorkflowAgentRole => Boolean(value)),
+        },
+      );
+    }
 
     const updatedRun = getWorkflowRunById(db, runId, role, userId);
     if (
       updatedRun &&
-      updatedRun.steps.every((step) => step.status === "completed")
+      updatedRun.steps.every(
+        (step) => step.status === "completed" || step.status === "skipped",
+      )
     ) {
       db.update(workflowRuns)
         .set({ status: "completed", updatedAt: new Date().toISOString() })
@@ -880,9 +1535,9 @@ export async function runNextWorkflowStep(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Step failed";
-    await markStepStatus(db, nextStep.id, "failed", {
+    await markStepStatus(db, activeStep.id, "failed", {
       lastError: message,
-      retryCount: nextStep.retryCount + 1,
+      retryCount: activeStep.retryCount + 1,
     });
     db.update(workflowRuns)
       .set({
@@ -894,8 +1549,9 @@ export async function runNextWorkflowStep(
       .where(eq(workflowRuns.id, runId))
       .run();
 
-    await addEvent(db, runId, nextStep.id, "step.failed", message, {
-      retryCount: nextStep.retryCount + 1,
+    await addEvent(db, runId, activeStep.id, "step.failed", message, {
+      retryCount: activeStep.retryCount + 1,
+      agentRole: activeStep.agentRole,
     });
 
     return {

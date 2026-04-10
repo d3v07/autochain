@@ -1,0 +1,47 @@
+{
+  "enabled": true,
+  "coordinatorRole": "orchestrator",
+  "strategy": "parallel_fanout",
+  "summary": "Split the review across finance and inventory, then consolidate the output.",
+  "agents": [
+    {
+      "role": "orchestrator",
+      "label": "Orchestrator",
+      "objective": "Coordinate the run and merge outputs.",
+      "capabilities": [
+        "routing",
+        "handoffs"
+      ]
+    },
+    {
+      "role": "finance_analyst",
+      "label": "Finance Analyst",
+      "objective": "Review invoice exposure.",
+      "capabilities": [
+        "invoice-review"
+      ]
+    },
+    {
+      "role": "inventory_analyst",
+      "label": "Inventory Analyst",
+      "objective": "Review reorder and stock implications.",
+      "capabilities": [
+        "inventory-review"
+      ]
+    },
+    {
+      "role": "document_specialist",
+      "label": "Document Specialist",
+      "objective": "Package final outputs.",
+      "capabilities": [
+        "document-generation"
+      ]
+    }
+  ],
+  "assignments": {
+    "navigate.dashboard": "orchestrator",
+    "report.check_overdue_invoices": "finance_analyst",
+    "report.inventory_reorder": "inventory_analyst",
+    "document.generate_agreement": "document_specialist"
+  }
+}

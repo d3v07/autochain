@@ -526,6 +526,8 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
         db: app.db,
         session,
         task: parsed.data.task,
+        actionKeys: parsed.data.actionKeys,
+        orchestration: parsed.data.orchestration ?? null,
         autonomy: auth.autonomy,
         sessionId: auth.sessionId,
       });

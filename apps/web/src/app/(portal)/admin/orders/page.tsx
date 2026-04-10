@@ -43,7 +43,7 @@ export default function AdminOrdersPage() {
     if (!token || user?.role !== "admin") return;
 
     api<{ data: { id: number; companyName: string }[] }>(
-      "/api/admin/customers?limit=200",
+      "/api/admin/customers?limit=100",
       { token },
     ).then((res) => setCustomers(res.data));
   }, [token, user?.role]);
@@ -51,7 +51,7 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     if (!token || user?.role !== "admin") return;
 
-    const params = new URLSearchParams({ limit: "500" });
+    const params = new URLSearchParams({ limit: "100" });
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (customerFilter !== "all") params.set("customerId", customerFilter);
 

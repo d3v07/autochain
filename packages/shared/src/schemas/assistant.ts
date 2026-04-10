@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AssistantMode, UserRole } from "./auth.js";
 import { DocumentKind } from "./document.js";
+import { WorkflowOrchestration } from "./workflow.js";
 
 export const AssistantSessionStatus = z.enum([
   "active",
@@ -94,6 +95,8 @@ export type SessionDocumentRequest = z.infer<typeof SessionDocumentRequest>;
 
 export const SessionWorkflowRequest = z.object({
   task: z.string().min(3),
+  actionKeys: z.array(z.string()).optional(),
+  orchestration: WorkflowOrchestration.optional(),
 });
 export type SessionWorkflowRequest = z.infer<typeof SessionWorkflowRequest>;
 

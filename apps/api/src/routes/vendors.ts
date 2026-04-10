@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import {
   customers,
   products,
@@ -33,6 +34,31 @@ function parseEvents(raw: string) {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+const UpsertVendorShipment = z.object({
+  trackingNumber: z.string().trim().min(3),
+  carrier: z.string().trim().min(2),
+  status: z.enum(["pending", "in_transit", "delivered", "delayed"]),
+  estimatedDelivery: z.string().trim().nullable().optional(),
+  note: z.string().trim().optional(),
+  location: z.string().trim().optional(),
+});
+
+function vendorShipmentNote(
+  status: z.infer<typeof UpsertVendorShipment>["status"],
+) {
+  switch (status) {
+    case "in_transit":
+      return "Freight departed and is currently in transit.";
+    case "delivered":
+      return "Shipment delivered to destination.";
+    case "delayed":
+      return "Shipment delayed and needs follow-up.";
+    case "pending":
+    default:
+      return "Freight update recorded and awaiting movement.";
   }
 }
 
@@ -282,6 +308,137 @@ export const vendorRoutes: FastifyPluginAsync = async (app) => {
       error: null,
     };
   });
+
+  app.put<{ Params: { purchaseOrderId: string } }>(
+    "/purchase-orders/:purchaseOrderId/shipment",
+    async (request, reply) => {
+      const auth = getUser(request);
+      const purchaseOrderId = Number(request.params.purchaseOrderId);
+
+      if (!Number.isFinite(purchaseOrderId)) {
+        return reply.status(400).send({
+          success: false,
+          data: null,
+          error: "Invalid purchase order id",
+        });
+      }
+
+      const parsed = UpsertVendorShipment.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          success: false,
+          data: null,
+          error: "Invalid shipment update payload",
+        });
+      }
+
+      const purchaseOrder = app.db
+        .select()
+        .from(purchaseOrders)
+        .where(eq(purchaseOrders.id, purchaseOrderId))
+        .get();
+
+      if (!purchaseOrder) {
+        return reply.status(404).send({
+          success: false,
+          data: null,
+          error: "Purchase order not found",
+        });
+      }
+
+      if (
+        auth.role !== "admin" &&
+        purchaseOrder.vendorCustomerId !== auth.customerId
+      ) {
+        return reply.status(403).send({
+          success: false,
+          data: null,
+          error: "Access denied",
+        });
+      }
+
+      const {
+        carrier,
+        trackingNumber,
+        status,
+        estimatedDelivery,
+        note,
+        location,
+      } = parsed.data;
+      const timestamp = new Date().toISOString();
+      const nextEvent = {
+        status,
+        description: note || vendorShipmentNote(status),
+        location: location || undefined,
+        timestamp,
+      };
+
+      const existingShipment = app.db
+        .select()
+        .from(vendorShipments)
+        .where(eq(vendorShipments.purchaseOrderId, purchaseOrderId))
+        .get();
+
+      const existingEvents = existingShipment
+        ? parseEvents(existingShipment.events)
+        : [];
+      const serializedEvents = JSON.stringify([...existingEvents, nextEvent]);
+
+      const shipmentRow = existingShipment
+        ? app.db
+            .update(vendorShipments)
+            .set({
+              carrier,
+              trackingNumber,
+              status,
+              estimatedDelivery: estimatedDelivery ?? null,
+              events: serializedEvents,
+            })
+            .where(eq(vendorShipments.purchaseOrderId, purchaseOrderId))
+            .returning()
+            .get()
+        : app.db
+            .insert(vendorShipments)
+            .values({
+              purchaseOrderId,
+              carrier,
+              trackingNumber,
+              status,
+              estimatedDelivery: estimatedDelivery ?? null,
+              events: serializedEvents,
+            })
+            .returning()
+            .get();
+
+      const purchaseOrderStatus =
+        status === "delivered"
+          ? "received"
+          : status === "in_transit" || status === "delayed"
+            ? "shipped"
+            : purchaseOrder.status === "draft"
+              ? "confirmed"
+              : purchaseOrder.status;
+
+      app.db
+        .update(purchaseOrders)
+        .set({
+          status: purchaseOrderStatus,
+          updatedAt: timestamp,
+        })
+        .where(eq(purchaseOrders.id, purchaseOrderId))
+        .run();
+
+      return {
+        success: true,
+        data: {
+          ...shipmentRow,
+          purchaseOrderStatus,
+          events: parseEvents(shipmentRow!.events),
+        },
+        error: null,
+      };
+    },
+  );
 
   app.get("/catalog", async (request, reply) => {
     const auth = getUser(request);

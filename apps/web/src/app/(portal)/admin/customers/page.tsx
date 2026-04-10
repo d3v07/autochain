@@ -32,7 +32,7 @@ export default function AdminCustomersPage() {
   useEffect(() => {
     if (!token || user?.role !== "admin") return;
 
-    api<{ data: AdminCustomer[] }>("/api/admin/customers?limit=200", { token })
+    api<{ data: AdminCustomer[] }>("/api/admin/customers?limit=100", { token })
       .then((res) => setCustomers(res.data))
       .finally(() => setLoading(false));
   }, [token, user?.role]);

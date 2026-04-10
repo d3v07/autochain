@@ -32,6 +32,46 @@ export const WorkflowStepActionType = z.enum([
 ]);
 export type WorkflowStepActionType = z.infer<typeof WorkflowStepActionType>;
 
+export const WorkflowAgentRole = z.enum([
+  "orchestrator",
+  "ops_analyst",
+  "finance_analyst",
+  "inventory_analyst",
+  "supplier_manager",
+  "logistics_coordinator",
+  "document_specialist",
+  "risk_guardian",
+  "comms_coordinator",
+]);
+export type WorkflowAgentRole = z.infer<typeof WorkflowAgentRole>;
+
+export const WorkflowOrchestrationStrategy = z.enum([
+  "serial_handoff",
+  "parallel_fanout",
+  "approval_gated",
+]);
+export type WorkflowOrchestrationStrategy = z.infer<
+  typeof WorkflowOrchestrationStrategy
+>;
+
+export const WorkflowAgent = z.object({
+  role: WorkflowAgentRole,
+  label: z.string(),
+  objective: z.string(),
+  capabilities: z.array(z.string()).default([]),
+});
+export type WorkflowAgent = z.infer<typeof WorkflowAgent>;
+
+export const WorkflowOrchestration = z.object({
+  enabled: z.boolean().default(true),
+  coordinatorRole: WorkflowAgentRole,
+  strategy: WorkflowOrchestrationStrategy,
+  summary: z.string(),
+  agents: z.array(WorkflowAgent).min(1),
+  assignments: z.record(z.string(), WorkflowAgentRole).default({}),
+});
+export type WorkflowOrchestration = z.infer<typeof WorkflowOrchestration>;
+
 export const WorkflowStep = z.object({
   id: z.number(),
   stepNumber: z.number(),
@@ -46,6 +86,9 @@ export const WorkflowStep = z.object({
   maxRetries: z.number(),
   lastError: z.string().nullable(),
   checkpointData: z.record(z.string(), z.unknown()),
+  agentRole: WorkflowAgentRole.nullable().optional(),
+  dependsOnStepNumbers: z.array(z.number()).optional(),
+  parallelGroup: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -92,6 +135,7 @@ export const WorkflowRun = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   expiresAt: z.string(),
+  orchestration: WorkflowOrchestration.nullable().optional(),
   steps: z.array(WorkflowStep),
   events: z.array(WorkflowEvent).optional(),
   artifacts: z.array(WorkflowArtifact).optional(),
@@ -114,5 +158,7 @@ export type SandboxAction = z.infer<typeof SandboxAction>;
 
 export const CreateWorkflowRunRequest = z.object({
   task: z.string().min(3),
+  actionKeys: z.array(z.string()).optional(),
+  orchestration: WorkflowOrchestration.optional(),
 });
 export type CreateWorkflowRunRequest = z.infer<typeof CreateWorkflowRunRequest>;

@@ -1,0 +1,55 @@
+{
+  "enabled": true,
+  "coordinatorRole": "orchestrator",
+  "strategy": "parallel_fanout",
+  "summary": "Customer orchestration splits the review across operations, finance, inventory, and documentation lanes before final handoff.",
+  "agents": [
+    {
+      "role": "orchestrator",
+      "label": "Orchestrator",
+      "objective": "Coordinate the review and keep each lane inside the AutoChain sandbox.",
+      "capabilities": [
+        "routing",
+        "handoffs",
+        "checkpointing"
+      ]
+    },
+    {
+      "role": "ops_analyst",
+      "label": "Ops Analyst",
+      "objective": "Review account and order activity for the current request.",
+      "capabilities": [
+        "dashboard-review",
+        "operations"
+      ]
+    },
+    {
+      "role": "finance_analyst",
+      "label": "Finance Analyst",
+      "objective": "Inspect invoice or balance exposure for the current request.",
+      "capabilities": [
+        "invoice-review",
+        "finance"
+      ]
+    },
+    {
+      "role": "inventory_analyst",
+      "label": "Inventory Analyst",
+      "objective": "Review stock, catalog, or reorder implications for the request.",
+      "capabilities": [
+        "inventory",
+        "catalog"
+      ]
+    },
+    {
+      "role": "document_specialist",
+      "label": "Document Specialist",
+      "objective": "Package outputs into a reusable document or brief.",
+      "capabilities": [
+        "report-generation",
+        "documentation"
+      ]
+    }
+  ],
+  "assignments": {}
+}

@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
@@ -29,6 +35,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import type {
+  WorkflowAgentRole,
+  WorkflowOrchestration,
+} from "@autochain/shared";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/status-badge";
@@ -55,6 +65,9 @@ interface WorkflowStep {
   maxRetries: number;
   lastError: string | null;
   checkpointData: Record<string, unknown>;
+  agentRole?: WorkflowAgentRole | null;
+  dependsOnStepNumbers?: number[];
+  parallelGroup?: string | null;
 }
 
 interface WorkflowArtifact {
@@ -91,6 +104,7 @@ interface WorkflowRun {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  orchestration?: WorkflowOrchestration | null;
   steps: WorkflowStep[];
   events?: WorkflowEvent[];
   artifacts?: WorkflowArtifact[];
@@ -117,7 +131,20 @@ interface WorkflowTemplate {
   actionKeys: string[];
   defaultObjective: string;
   icon: LucideIcon;
+  orchestration?: WorkflowOrchestration;
 }
+
+const AGENT_ROLE_LABELS: Record<WorkflowAgentRole, string> = {
+  orchestrator: "Orchestrator",
+  ops_analyst: "Ops Analyst",
+  finance_analyst: "Finance Analyst",
+  inventory_analyst: "Inventory Analyst",
+  supplier_manager: "Supplier Manager",
+  logistics_coordinator: "Logistics Coordinator",
+  document_specialist: "Document Specialist",
+  risk_guardian: "Risk Guardian",
+  comms_coordinator: "Comms Coordinator",
+};
 
 const ACTION_TYPE_ORDER: ActionType[] = [
   "navigate",
@@ -272,11 +299,174 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       "Create an operational report and prepare a Gmail draft for follow-up on flagged accounts.",
     icon: Mail,
   },
+  {
+    id: "multi-agent-control-tower",
+    title: "Multi-Agent Control Tower",
+    description:
+      "Customer-side orchestration that fans out across finance and inventory before consolidating the output.",
+    actionKeys: [
+      "navigate.dashboard",
+      "report.check_overdue_invoices",
+      "report.inventory_reorder",
+      "document.generate_agreement",
+    ],
+    defaultObjective:
+      "Run a multi-agent control tower review across invoices, inventory, and the final business-ready summary.",
+    icon: Bot,
+    orchestration: {
+      enabled: true,
+      coordinatorRole: "orchestrator",
+      strategy: "parallel_fanout",
+      summary:
+        "Finance and inventory lanes run in parallel after the orchestrator sets context, then the final document is packaged.",
+      agents: [
+        {
+          role: "orchestrator",
+          label: "Orchestrator",
+          objective: "Set context, route work, and merge the lane outputs.",
+          capabilities: ["routing", "handoffs", "checkpointing"],
+        },
+        {
+          role: "finance_analyst",
+          label: "Finance Analyst",
+          objective: "Review unpaid and overdue invoice exposure.",
+          capabilities: ["invoice-review", "collections"],
+        },
+        {
+          role: "inventory_analyst",
+          label: "Inventory Analyst",
+          objective: "Review low-stock products and reorder implications.",
+          capabilities: ["inventory-review", "replenishment"],
+        },
+        {
+          role: "document_specialist",
+          label: "Document Specialist",
+          objective: "Package the final brief once the lanes are complete.",
+          capabilities: ["report-generation", "documentation"],
+        },
+      ],
+      assignments: {
+        "navigate.dashboard": "orchestrator",
+        "report.check_overdue_invoices": "finance_analyst",
+        "report.inventory_reorder": "inventory_analyst",
+        "document.generate_agreement": "document_specialist",
+      },
+    },
+  },
+  {
+    id: "vendor-war-room",
+    title: "Vendor War Room",
+    description:
+      "Vendor-side orchestration for purchase orders, payables, and final supplier briefing.",
+    actionKeys: [
+      "navigate.vendor.purchase-orders",
+      "report.vendor_monthly",
+      "report.vendor_invoice_review",
+      "document.generate_agreement",
+    ],
+    defaultObjective:
+      "Run a multi-agent vendor war room across purchase orders, shipments, invoice exposure, and supplier follow-up.",
+    icon: PlugZap,
+    orchestration: {
+      enabled: true,
+      coordinatorRole: "orchestrator",
+      strategy: "parallel_fanout",
+      summary:
+        "Supplier, finance, and documentation lanes coordinate around the vendor execution workspace.",
+      agents: [
+        {
+          role: "orchestrator",
+          label: "Orchestrator",
+          objective: "Coordinate the supplier execution workflow.",
+          capabilities: ["routing", "handoffs", "checkpointing"],
+        },
+        {
+          role: "supplier_manager",
+          label: "Supplier Manager",
+          objective:
+            "Review purchase orders, production status, and supply issues.",
+          capabilities: ["purchase-orders", "supplier-follow-up"],
+        },
+        {
+          role: "finance_analyst",
+          label: "Finance Analyst",
+          objective: "Review invoice follow-up and payment dependencies.",
+          capabilities: ["invoice-review", "payables"],
+        },
+        {
+          role: "document_specialist",
+          label: "Document Specialist",
+          objective: "Package the final supplier brief and follow-up notes.",
+          capabilities: ["report-generation", "documentation"],
+        },
+      ],
+      assignments: {
+        "navigate.vendor.purchase-orders": "orchestrator",
+        "report.vendor_monthly": "supplier_manager",
+        "report.vendor_invoice_review": "finance_analyst",
+        "document.generate_agreement": "document_specialist",
+      },
+    },
+  },
+  {
+    id: "admin-incident-cell",
+    title: "Admin Incident Cell",
+    description:
+      "Admin orchestration for risky sessions, customer risk, and operator follow-up.",
+    actionKeys: [
+      "navigate.admin.sessions",
+      "report.customer_risk",
+      "connector.gmail.compose",
+    ],
+    defaultObjective:
+      "Run a multi-agent incident cell that reviews risky sessions, produces a risk brief, and prepares operator outreach.",
+    icon: ShieldAlert,
+    orchestration: {
+      enabled: true,
+      coordinatorRole: "orchestrator",
+      strategy: "parallel_fanout",
+      summary:
+        "Risk review and outreach preparation are coordinated through a single admin orchestrator.",
+      agents: [
+        {
+          role: "orchestrator",
+          label: "Orchestrator",
+          objective: "Coordinate risk review and final operator response.",
+          capabilities: ["routing", "handoffs", "checkpointing"],
+        },
+        {
+          role: "risk_guardian",
+          label: "Risk Guardian",
+          objective: "Investigate risky sessions and customer exposure.",
+          capabilities: ["session-review", "risk-analysis"],
+        },
+        {
+          role: "comms_coordinator",
+          label: "Comms Coordinator",
+          objective: "Prepare follow-up messaging for operators.",
+          capabilities: ["connector-drafts", "operator-follow-up"],
+        },
+      ],
+      assignments: {
+        "navigate.admin.sessions": "orchestrator",
+        "report.customer_risk": "risk_guardian",
+        "connector.gmail.compose": "comms_coordinator",
+      },
+    },
+  },
 ];
+
+const WORKFLOW_LIBRARY_WIDTH_KEY = "evo_workflow_library_width_v1";
+const DEFAULT_WORKFLOW_LIBRARY_WIDTH = 360;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 function buildWorkflowTask(
   objective: string,
   selectedActions: SandboxAction[],
+  orchestration?: WorkflowOrchestration | null,
 ) {
   const cleanObjective = objective.trim();
   const stepLines = selectedActions
@@ -285,14 +475,32 @@ function buildWorkflowTask(
         `${index + 1}. ${action.label} (${action.key}) - ${action.description}`,
     )
     .join("\n");
+  const orchestrationLines =
+    orchestration && orchestration.enabled
+      ? [
+          `Run this as a ${orchestration.strategy.replaceAll("_", " ")} team flow.`,
+          `Coordinator: ${AGENT_ROLE_LABELS[orchestration.coordinatorRole]}.`,
+          `Agents: ${orchestration.agents
+            .map((agent) => AGENT_ROLE_LABELS[agent.role])
+            .join(", ")}.`,
+          `Team brief: ${orchestration.summary}`,
+        ].join("\n")
+      : null;
 
   return [
     cleanObjective || "Run the selected AutoChain sandbox workflow.",
     "Stay inside the AutoChain application sandbox.",
+    orchestrationLines,
     "Use these small, justifiable actions in this sequence when possible:",
     stepLines,
     "Require approval before any side effect and explain each step before execution.",
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function getAgentRoleLabel(role: WorkflowAgentRole | null | undefined) {
+  return role ? AGENT_ROLE_LABELS[role] : null;
 }
 
 function getActionPresentation(action: SandboxAction | WorkflowStep) {
@@ -343,7 +551,16 @@ export default function WorkflowsPage() {
     null,
   );
   const [selectedActionKeys, setSelectedActionKeys] = useState<string[]>([]);
+  const [orchestrationDraft, setOrchestrationDraft] =
+    useState<WorkflowOrchestration | null>(null);
   const [builderInitialized, setBuilderInitialized] = useState(false);
+  const [libraryWidth, setLibraryWidth] = useState(
+    DEFAULT_WORKFLOW_LIBRARY_WIDTH,
+  );
+  const [resizingLibrary, setResizingLibrary] = useState<{
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   const actionMap = useMemo(
     () => new Map(actions.map((action) => [action.key, action])),
@@ -376,8 +593,8 @@ export default function WorkflowsPage() {
   );
 
   const builderTask = useMemo(
-    () => buildWorkflowTask(objective, builderActions),
-    [objective, builderActions],
+    () => buildWorkflowTask(objective, builderActions, orchestrationDraft),
+    [objective, builderActions, orchestrationDraft],
   );
   const selectedPrimaryAction = useMemo(
     () => getRunPrimaryAction(selected),
@@ -390,6 +607,7 @@ export default function WorkflowsPage() {
   const sideEffectCount = builderActions.filter(
     (action) => action.sideEffect,
   ).length;
+  const assignedAgentCount = orchestrationDraft?.agents.length ?? 0;
 
   async function loadRuns() {
     if (!token) return;
@@ -426,13 +644,71 @@ export default function WorkflowsPage() {
     setSelectedTemplateId(initialTemplate.id);
     setSelectedActionKeys(initialTemplate.actionKeys);
     setObjective(initialTemplate.defaultObjective);
+    setOrchestrationDraft(initialTemplate.orchestration ?? null);
     setBuilderInitialized(true);
   }, [availableTemplates, builderInitialized]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedWidth = Number(
+      window.localStorage.getItem(WORKFLOW_LIBRARY_WIDTH_KEY),
+    );
+    if (Number.isFinite(storedWidth) && storedWidth > 0) {
+      setLibraryWidth(storedWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      WORKFLOW_LIBRARY_WIDTH_KEY,
+      String(libraryWidth),
+    );
+  }, [libraryWidth]);
+
+  useEffect(() => {
+    if (!resizingLibrary || typeof window === "undefined") return;
+
+    const currentResize = resizingLibrary;
+    const previousUserSelect = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    function handlePointerMove(event: PointerEvent) {
+      const nextWidth = clamp(
+        currentResize.startWidth + (event.clientX - currentResize.startX),
+        320,
+        Math.min(520, window.innerWidth - 460),
+      );
+      setLibraryWidth(nextWidth);
+    }
+
+    function handlePointerUp() {
+      setResizingLibrary(null);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.cursor = previousCursor;
+    };
+  }, [resizingLibrary]);
 
   function applyTemplate(template: WorkflowTemplate) {
     setSelectedTemplateId(template.id);
     setSelectedActionKeys(template.actionKeys);
     setObjective(template.defaultObjective);
+    setOrchestrationDraft(template.orchestration ?? null);
   }
 
   function toggleAction(key: string) {
@@ -466,7 +742,11 @@ export default function WorkflowsPage() {
       const res = await api<{ data: WorkflowRun }>("/api/workflows", {
         method: "POST",
         token,
-        body: { task: builderTask },
+        body: {
+          task: builderTask,
+          actionKeys: selectedActionKeys,
+          orchestration: orchestrationDraft ?? undefined,
+        },
       });
       await loadRuns();
       setSelected(res.data);
@@ -521,184 +801,216 @@ export default function WorkflowsPage() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">
-            Workflow Builder
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            Compose flows from small, justifiable sandbox actions with
-            approvals, retries, and checkpoints.
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-            {error}
-          </div>
-        )}
-
-        <div className="rounded border border-border bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Action Library
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                Add compact nodes to the builder. Everything stays inside
-                eSupplyPro.
-              </p>
-            </div>
-            <div className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700">
-              App sandbox only
-            </div>
+    <div className="flex flex-col gap-6 xl:h-[calc(100vh-3rem)] xl:flex-row xl:overflow-hidden">
+      <aside
+        className="w-full xl:relative xl:h-full xl:w-[var(--workflow-library-width)] xl:shrink-0"
+        style={
+          {
+            "--workflow-library-width": `${libraryWidth}px`,
+          } as CSSProperties
+        }
+      >
+        <div className="space-y-6 xl:h-full xl:overflow-y-auto xl:pr-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">
+              Workflow Builder
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              Compose flows from small, justifiable sandbox actions with
+              approvals, retries, and checkpoints.
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              Keep the tool library fixed on the left, then scroll the canvas
+              independently on the right. Drag the divider to resize the
+              library.
+            </p>
           </div>
 
-          <div className="mt-4 space-y-4">
-            {groupedActions.map((group) => {
-              const meta = ACTION_TYPE_META[group.type];
-              const GroupIcon = meta.icon;
+          {error && (
+            <div className="rounded border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </div>
+          )}
 
-              return (
-                <div key={group.type}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border ${meta.iconClasses}`}
-                    >
-                      <GroupIcon className="h-3.5 w-3.5" />
+          <div className="rounded border border-border bg-surface p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Action Library
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  Add compact nodes to the builder. Everything stays inside
+                  eSupplyPro.
+                </p>
+              </div>
+              <div className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700">
+                App sandbox only
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {groupedActions.map((group) => {
+                const meta = ACTION_TYPE_META[group.type];
+                const GroupIcon = meta.icon;
+
+                return (
+                  <div key={group.type}>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`flex h-7 w-7 items-center justify-center rounded-full border ${meta.iconClasses}`}
+                      >
+                        <GroupIcon className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {meta.label}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {group.items.length} available action
+                          {group.items.length === 1 ? "" : "s"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {meta.label}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {group.items.length} available action
-                        {group.items.length === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="mt-3 space-y-2">
-                    {group.items.map((action) => {
-                      const presentation = getActionPresentation(action);
-                      const ActionIcon = presentation.icon;
-                      const isSelected = selectedActionKeys.includes(
-                        action.key,
-                      );
+                    <div className="mt-3 space-y-2">
+                      {group.items.map((action) => {
+                        const presentation = getActionPresentation(action);
+                        const ActionIcon = presentation.icon;
+                        const isSelected = selectedActionKeys.includes(
+                          action.key,
+                        );
 
-                      return (
-                        <div
-                          key={action.key}
-                          className={`rounded-xl border px-3 py-3 transition-colors ${
-                            isSelected
-                              ? "border-accent bg-accent-light/20"
-                              : "border-border bg-background"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border ${presentation.iconClasses}`}
-                            >
-                              <ActionIcon className="h-4 w-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-foreground">
-                                    {action.label}
-                                  </p>
-                                  <p className="mt-1 text-xs leading-5 text-muted">
-                                    {action.description}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleAction(action.key)}
-                                  className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                    isSelected
-                                      ? "bg-accent text-white hover:bg-accent-hover"
-                                      : "border border-border text-foreground hover:bg-surface"
-                                  }`}
-                                >
-                                  {isSelected ? "Added" : "Add"}
-                                </button>
+                        return (
+                          <div
+                            key={action.key}
+                            className={`rounded-xl border px-3 py-3 transition-colors ${
+                              isSelected
+                                ? "border-accent bg-accent-light/20"
+                                : "border-border bg-background"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border ${presentation.iconClasses}`}
+                              >
+                                <ActionIcon className="h-4 w-4" />
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <span
-                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${presentation.chipClasses}`}
-                                >
-                                  {ACTION_TYPE_META[action.actionType].label}
-                                </span>
-                                {action.requiresApproval && (
-                                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                                    Approval
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">
+                                      {action.label}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5 text-muted">
+                                      {action.description}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleAction(action.key)}
+                                    className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                      isSelected
+                                        ? "bg-accent text-white hover:bg-accent-hover"
+                                        : "border border-border text-foreground hover:bg-surface"
+                                    }`}
+                                  >
+                                    {isSelected ? "Added" : "Add"}
+                                  </button>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${presentation.chipClasses}`}
+                                  >
+                                    {ACTION_TYPE_META[action.actionType].label}
                                   </span>
-                                )}
-                                {action.sideEffect && (
-                                  <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
-                                    Side effect
-                                  </span>
-                                )}
+                                  {action.requiresApproval && (
+                                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                      Approval
+                                    </span>
+                                  )}
+                                  {action.sideEffect && (
+                                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+                                      Side effect
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded border border-border bg-surface">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Workflow Runs
+              </h2>
+            </div>
+            {loading ? (
+              <div className="px-4 py-6">
+                <ThinkingIndicator className="justify-center" />
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {runs.map((run) => (
+                  <button
+                    key={run.id}
+                    type="button"
+                    onClick={() => loadRun(run.id)}
+                    className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-background ${
+                      selected?.id === run.id ? "bg-accent-light/20" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {run.task.split("\n")[0]}
+                      </p>
+                      <p className="mt-1 text-xs text-muted">
+                        {formatWorkflowSummary(run)}
+                      </p>
+                      {run.orchestration && (
+                        <p className="mt-1 text-xs text-ai-foreground">
+                          Multi-agent{" "}
+                          {run.orchestration.strategy.replaceAll("_", " ")}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-muted">
+                        {new Date(run.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <StatusBadge status={run.status} />
+                  </button>
+                ))}
+                {runs.length === 0 && (
+                  <p className="px-4 py-6 text-center text-sm text-muted">
+                    No workflows created yet.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
+        <button
+          type="button"
+          aria-label="Resize workflow library"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            setResizingLibrary({
+              startX: event.clientX,
+              startWidth: libraryWidth,
+            });
+          }}
+          className="absolute inset-y-0 right-0 hidden w-3 translate-x-1/2 cursor-col-resize bg-transparent xl:block"
+        />
+      </aside>
 
-        <div className="rounded border border-border bg-surface">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Workflow Runs
-            </h2>
-          </div>
-          {loading ? (
-            <div className="px-4 py-6">
-              <ThinkingIndicator className="justify-center" />
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {runs.map((run) => (
-                <button
-                  key={run.id}
-                  type="button"
-                  onClick={() => loadRun(run.id)}
-                  className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-background ${
-                    selected?.id === run.id ? "bg-accent-light/20" : ""
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {run.task.split("\n")[0]}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {formatWorkflowSummary(run)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      {new Date(run.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <StatusBadge status={run.status} />
-                </button>
-              ))}
-              {runs.length === 0 && (
-                <p className="px-4 py-6 text-center text-sm text-muted">
-                  No workflows created yet.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-6">
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 xl:overflow-y-auto xl:pr-1">
         <div className="rounded border border-border bg-surface p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -714,7 +1026,7 @@ export default function WorkflowsPage() {
                 in-app actions you want the runtime to follow.
               </p>
             </div>
-            <div className="grid min-w-[220px] grid-cols-3 gap-2">
+            <div className="grid min-w-[280px] grid-cols-4 gap-2">
               <div className="rounded border border-border bg-background px-3 py-2">
                 <p className="text-[11px] uppercase tracking-wide text-muted">
                   Nodes
@@ -737,6 +1049,14 @@ export default function WorkflowsPage() {
                 </p>
                 <p className="mt-1 text-lg font-semibold text-foreground">
                   {sideEffectCount}
+                </p>
+              </div>
+              <div className="rounded border border-border bg-background px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted">
+                  Agents
+                </p>
+                <p className="mt-1 text-lg font-semibold text-foreground">
+                  {assignedAgentCount}
                 </p>
               </div>
             </div>
@@ -772,6 +1092,18 @@ export default function WorkflowsPage() {
                         <p className="mt-1 text-xs leading-5 text-muted">
                           {template.description}
                         </p>
+                        {template.orchestration && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-ai-light/50 px-2 py-0.5 text-[11px] font-medium text-ai-foreground">
+                              Multi-agent
+                            </span>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                              {template.orchestration.strategy
+                                .replaceAll("_", " ")
+                                .replace(/\b\w/g, (char) => char.toUpperCase())}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -809,13 +1141,52 @@ export default function WorkflowsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-background p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Runtime Prompt Preview
-              </p>
-              <pre className="mt-3 whitespace-pre-wrap text-xs leading-6 text-muted">
-                {builderTask}
-              </pre>
+            <div className="space-y-3">
+              <div className="rounded-xl border border-border bg-background p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Runtime Prompt Preview
+                </p>
+                <pre className="mt-3 whitespace-pre-wrap text-xs leading-6 text-muted">
+                  {builderTask}
+                </pre>
+              </div>
+              {orchestrationDraft && (
+                <div className="rounded-xl border border-ai/20 bg-ai-light/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ai-foreground">
+                    Team Orchestration
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {orchestrationDraft.summary}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-medium text-foreground">
+                      Coordinator:{" "}
+                      {AGENT_ROLE_LABELS[orchestrationDraft.coordinatorRole]}
+                    </span>
+                    <span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-medium text-foreground">
+                      Strategy:{" "}
+                      {orchestrationDraft.strategy
+                        .replaceAll("_", " ")
+                        .replace(/\b\w/g, (char) => char.toUpperCase())}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {orchestrationDraft.agents.map((agent) => (
+                      <div
+                        key={agent.role}
+                        className="rounded border border-ai/10 bg-white/70 px-3 py-2"
+                      >
+                        <p className="text-sm font-medium text-foreground">
+                          {agent.label}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          {agent.objective}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -882,6 +1253,18 @@ export default function WorkflowsPage() {
                                   {tag}
                                 </span>
                               ))}
+                              {orchestrationDraft &&
+                                orchestrationDraft.assignments[action.key] && (
+                                  <span className="rounded-full bg-ai-light/50 px-2 py-0.5 text-[11px] font-medium text-ai-foreground">
+                                    {
+                                      AGENT_ROLE_LABELS[
+                                        orchestrationDraft.assignments[
+                                          action.key
+                                        ]!
+                                      ]
+                                    }
+                                  </span>
+                                )}
                             </div>
                           </div>
                           <div className="flex shrink-0 gap-1">
@@ -1063,6 +1446,46 @@ export default function WorkflowsPage() {
                 </div>
               )}
 
+              {selected.orchestration && (
+                <div className="mt-4 rounded border border-ai/20 bg-ai-light/20 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ai-foreground">
+                        Multi-Agent Orchestration
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {selected.orchestration.summary}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-medium text-foreground">
+                        Coordinator:{" "}
+                        {
+                          AGENT_ROLE_LABELS[
+                            selected.orchestration.coordinatorRole
+                          ]
+                        }
+                      </span>
+                      <span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-medium text-foreground">
+                        {selected.orchestration.strategy
+                          .replaceAll("_", " ")
+                          .replace(/\b\w/g, (char) => char.toUpperCase())}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selected.orchestration.agents.map((agent) => (
+                      <span
+                        key={agent.role}
+                        className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-medium text-foreground"
+                      >
+                        {agent.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -1108,9 +1531,19 @@ export default function WorkflowsPage() {
                                     >
                                       {ACTION_TYPE_META[step.actionType].label}
                                     </span>
+                                    {step.agentRole && (
+                                      <span className="rounded-full bg-ai-light/50 px-2 py-0.5 text-[11px] font-medium text-ai-foreground">
+                                        {getAgentRoleLabel(step.agentRole)}
+                                      </span>
+                                    )}
                                     {step.requiresApproval && (
                                       <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
                                         Approval
+                                      </span>
+                                    )}
+                                    {step.parallelGroup && (
+                                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                                        {step.parallelGroup}
                                       </span>
                                     )}
                                     {step.retryCount > 0 && (
@@ -1120,6 +1553,13 @@ export default function WorkflowsPage() {
                                       </span>
                                     )}
                                   </div>
+                                  {step.dependsOnStepNumbers &&
+                                    step.dependsOnStepNumbers.length > 0 && (
+                                      <p className="mt-2 text-[11px] text-muted">
+                                        Depends on steps{" "}
+                                        {step.dependsOnStepNumbers.join(", ")}
+                                      </p>
+                                    )}
                                 </div>
                               </div>
                               {step.lastError && (

@@ -23,6 +23,7 @@ import type {
   AssistantSession,
   AssistantWorkspaceOverview,
   DocumentKind,
+  WorkflowOrchestration,
 } from "@autochain/shared";
 import { createGeneratedDocument } from "./document-studio.js";
 import { createWorkflowRun } from "./workflow-runtime.js";
@@ -655,6 +656,8 @@ export async function createWorkflowFromAssistantSession(input: {
   db: Db;
   session: AssistantSession;
   task: string;
+  actionKeys?: string[];
+  orchestration?: WorkflowOrchestration | null;
   autonomy: "manual" | "ask" | "agent";
   sessionId: number | null;
 }) {
@@ -668,6 +671,8 @@ export async function createWorkflowFromAssistantSession(input: {
     mode: "agentic",
     autonomy: input.autonomy === "manual" ? "ask" : input.autonomy,
     task,
+    actionKeys: input.actionKeys,
+    orchestration: input.orchestration ?? null,
   });
 
   if (!run || "error" in run) {
@@ -687,6 +692,7 @@ export async function createWorkflowFromAssistantSession(input: {
     metadata: {
       workflowRunId: run.id,
       status: run.status,
+      orchestration: run.orchestration ?? null,
     },
   });
 

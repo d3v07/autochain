@@ -53,6 +53,8 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       mode: auth.mode,
       autonomy: auth.autonomy,
       task: parsed.data.task,
+      actionKeys: parsed.data.actionKeys,
+      orchestration: parsed.data.orchestration ?? null,
     });
 
     if (!run) {
@@ -79,6 +81,8 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       details: {
         task: parsed.data.task,
         stepCount: run.steps.length,
+        actionKeyCount: parsed.data.actionKeys?.length ?? 0,
+        orchestration: parsed.data.orchestration ?? null,
       },
     });
 
