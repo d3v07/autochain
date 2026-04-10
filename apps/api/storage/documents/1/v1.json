@@ -2,5 +2,5 @@
   "prompt": "Create a report from this assistant session.\n\nsystem: Visual session ready. Add screenshot or dashboard context.\nuser: Invoice aging dashboard\nTwo overdue balances stand out in the aging view.\nassistant: Visual review captured for finance context. I see 0 invoices that can be summarized into an unpaid invoice review.",
   "kind": "report",
   "customerId": 1,
-  "generatedAt": "2026-04-10T00:55:48.500Z"
+  "generatedAt": "2026-04-10T02:55:40.336Z"
 }

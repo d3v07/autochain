@@ -135,6 +135,28 @@ const customerData = [
     zip: "28202",
   },
   {
+    companyName: "Cascade Fenestration Group",
+    contactEmail: "orders@cascadefen.com",
+    contactName: "Derek Olsen",
+    accountNumber: "CFG-009",
+    phone: "555-0109",
+    address: "2300 Willamette Industrial Pkwy",
+    city: "Portland",
+    state: "OR",
+    zip: "97201",
+  },
+  {
+    companyName: "Lone Star Door Systems",
+    contactEmail: "purchasing@lonestardoors.com",
+    contactName: "Angela Reyes",
+    accountNumber: "LSD-010",
+    phone: "555-0110",
+    address: "4700 Gulf Freeway Suite 200",
+    city: "Houston",
+    state: "TX",
+    zip: "77003",
+  },
+  {
     companyName: "NorthStar Extrusions Supply",
     contactEmail: "ops@northstarextrusions.com",
     contactName: "Helen Brooks",
@@ -169,6 +191,30 @@ const customerData = [
     city: "Memphis",
     state: "TN",
     zip: "38103",
+  },
+  {
+    companyName: "Summit Seal & Gasket Co",
+    contactEmail: "ops@summitseal.com",
+    contactName: "Yusuf Amir",
+    accountNumber: "VND-104",
+    accountType: "vendor" as const,
+    phone: "555-0204",
+    address: "1700 Copper Basin Rd",
+    city: "Phoenix",
+    state: "AZ",
+    zip: "85004",
+  },
+  {
+    companyName: "Prairie Accessories & Trim",
+    contactEmail: "ops@prairietrim.com",
+    contactName: "Jenna Caldwell",
+    accountNumber: "VND-105",
+    accountType: "vendor" as const,
+    phone: "555-0205",
+    address: "310 Stockyards Dr",
+    city: "Kansas City",
+    state: "MO",
+    zip: "64101",
   },
 ];
 
@@ -521,6 +567,24 @@ const pricingData = [
     customPrice: null,
     discountPct: 8,
   })),
+  // Cascade gets 10% on doors
+  ...insertedProducts
+    .filter((p) => p.category === "doors")
+    .map((p) => ({
+      customerId: insertedCustomers[8]!.id,
+      productId: p.id,
+      customPrice: null,
+      discountPct: 10,
+    })),
+  // Lone Star gets custom pricing on hardware
+  ...insertedProducts
+    .filter((p) => p.category === "hardware")
+    .map((p) => ({
+      customerId: insertedCustomers[9]!.id,
+      productId: p.id,
+      customPrice: Math.round(p.unitPrice * 0.88 * 100) / 100,
+      discountPct: null,
+    })),
 ];
 db.insert(schema.customerPrices).values(pricingData).run();
 console.log(`Seeded ${pricingData.length} customer price overrides`);
@@ -670,6 +734,38 @@ const seededSessionData = [
     lastSeenAt: hoursAgo(9),
     ipAddress: "10.0.1.25",
     userAgent: "Chrome on macOS",
+  },
+  {
+    email: "orders@cascadefen.com",
+    mode: "text" as const,
+    autonomy: "manual" as const,
+    lastSeenAt: hoursAgo(5),
+    ipAddress: "10.0.0.71",
+    userAgent: "Firefox on Linux",
+  },
+  {
+    email: "purchasing@lonestardoors.com",
+    mode: "voice" as const,
+    autonomy: "ask" as const,
+    lastSeenAt: hoursAgo(4),
+    ipAddress: "10.0.0.78",
+    userAgent: "Chrome on Windows",
+  },
+  {
+    email: "ops@summitseal.com",
+    mode: "text" as const,
+    autonomy: "manual" as const,
+    lastSeenAt: hoursAgo(8),
+    ipAddress: "10.0.1.32",
+    userAgent: "Safari on macOS",
+  },
+  {
+    email: "ops@prairietrim.com",
+    mode: "agentic" as const,
+    autonomy: "ask" as const,
+    lastSeenAt: hoursAgo(6),
+    ipAddress: "10.0.1.40",
+    userAgent: "Edge on Windows",
   },
 ];
 
@@ -960,6 +1056,123 @@ const orderSeed = [
       { productIdx: 14, qty: 300 },
     ],
   },
+
+  // === Great Lakes Window (customer 6) ===
+  {
+    customerId: insertedCustomers[6]!.id,
+    orderNumber: "ESP-2026-0018",
+    status: "delivered" as const,
+    createdAt: daysAgo(70),
+    lines: [
+      { productIdx: 0, qty: 90 },
+      { productIdx: 2, qty: 45 },
+      { productIdx: 18, qty: 60 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[6]!.id,
+    orderNumber: "ESP-2026-0019",
+    status: "shipped" as const,
+    createdAt: daysAgo(8),
+    lines: [
+      { productIdx: 6, qty: 6 },
+      { productIdx: 13, qty: 40 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[6]!.id,
+    orderNumber: "ESP-2026-0020",
+    status: "confirmed" as const,
+    createdAt: daysAgo(2),
+    lines: [{ productIdx: 4, qty: 15 }],
+  },
+
+  // === Southeastern Architectural (customer 7) ===
+  {
+    customerId: insertedCustomers[7]!.id,
+    orderNumber: "ESP-2026-0021",
+    status: "delivered" as const,
+    createdAt: daysAgo(55),
+    lines: [
+      { productIdx: 7, qty: 18 },
+      { productIdx: 8, qty: 12 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[7]!.id,
+    orderNumber: "ESP-2026-0022",
+    status: "processing" as const,
+    createdAt: daysAgo(6),
+    lines: [
+      { productIdx: 20, qty: 80 },
+      { productIdx: 21, qty: 60 },
+    ],
+  },
+
+  // === Cascade Fenestration (customer 8) ===
+  {
+    customerId: insertedCustomers[8]!.id,
+    orderNumber: "ESP-2026-0023",
+    status: "delivered" as const,
+    createdAt: daysAgo(40),
+    lines: [
+      { productIdx: 7, qty: 30 },
+      { productIdx: 9, qty: 10 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[8]!.id,
+    orderNumber: "ESP-2026-0024",
+    status: "shipped" as const,
+    createdAt: daysAgo(10),
+    lines: [
+      { productIdx: 3, qty: 50 },
+      { productIdx: 5, qty: 70 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[8]!.id,
+    orderNumber: "ESP-2026-0025",
+    status: "draft" as const,
+    createdAt: daysAgo(1),
+    lines: [
+      { productIdx: 10, qty: 4 },
+      { productIdx: 11, qty: 8 },
+    ],
+  },
+
+  // === Lone Star Door Systems (customer 9) ===
+  {
+    customerId: insertedCustomers[9]!.id,
+    orderNumber: "ESP-2026-0026",
+    status: "delivered" as const,
+    createdAt: daysAgo(60),
+    lines: [
+      { productIdx: 8, qty: 20 },
+      { productIdx: 9, qty: 14 },
+      { productIdx: 15, qty: 80 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[9]!.id,
+    orderNumber: "ESP-2026-0027",
+    status: "shipped" as const,
+    createdAt: daysAgo(12),
+    lines: [
+      { productIdx: 7, qty: 16 },
+      { productIdx: 12, qty: 60 },
+    ],
+  },
+  {
+    customerId: insertedCustomers[9]!.id,
+    orderNumber: "ESP-2026-0028",
+    status: "confirmed" as const,
+    createdAt: daysAgo(3),
+    lines: [
+      { productIdx: 10, qty: 6 },
+      { productIdx: 16, qty: 100 },
+    ],
+  },
 ];
 
 let invoiceCount = 0;
@@ -1150,13 +1363,25 @@ const adminUser = userByEmail.get("admin@autochain.io");
 const northStarUser = userByEmail.get("ops@northstarextrusions.com");
 const bluePeakUser = userByEmail.get("ops@bluepeakglass.com");
 const redRiverUser = userByEmail.get("ops@redriverhardware.com");
+const summitUser = userByEmail.get("ops@summitseal.com");
+const prairieUser = userByEmail.get("ops@prairietrim.com");
+const cascadeUser = userByEmail.get("orders@cascadefen.com");
+const loneStarUser = userByEmail.get("purchasing@lonestardoors.com");
+const greatLakesUser = userByEmail.get("procurement@greatlakeswin.com");
+const southeasternUser = userByEmail.get("sales@seaglass.com");
 
 if (
   !acmeUser ||
   !adminUser ||
   !northStarUser ||
   !bluePeakUser ||
-  !redRiverUser
+  !redRiverUser ||
+  !summitUser ||
+  !prairieUser ||
+  !cascadeUser ||
+  !loneStarUser ||
+  !greatLakesUser ||
+  !southeasternUser
 ) {
   throw new Error("Expected seeded client, vendor, and admin users");
 }
@@ -1170,8 +1395,20 @@ const bluePeakAccount = insertedCustomers.find(
 const redRiverAccount = insertedCustomers.find(
   (customer) => customer.accountNumber === "VND-103",
 );
+const summitAccount = insertedCustomers.find(
+  (customer) => customer.accountNumber === "VND-104",
+);
+const prairieAccount = insertedCustomers.find(
+  (customer) => customer.accountNumber === "VND-105",
+);
 
-if (!northStarAccount || !bluePeakAccount || !redRiverAccount) {
+if (
+  !northStarAccount ||
+  !bluePeakAccount ||
+  !redRiverAccount ||
+  !summitAccount ||
+  !prairieAccount
+) {
   throw new Error("Expected seeded vendor accounts");
 }
 
@@ -1212,6 +1449,30 @@ db.insert(schema.vendorProfiles)
       operationsEmail: redRiverUser.email,
       createdAt: daysAgo(20),
       updatedAt: daysAgo(1),
+    },
+    {
+      customerId: summitAccount.id,
+      vendorCode: "SSG-04",
+      categoryFocus: "weatherstripping, seals, gaskets",
+      paymentTerms: "Net 30",
+      leadTimeDays: 7,
+      reliabilityScore: 96,
+      preferredShippingMethod: "Parcel",
+      operationsEmail: summitUser.email,
+      createdAt: daysAgo(15),
+      updatedAt: daysAgo(1),
+    },
+    {
+      customerId: prairieAccount.id,
+      vendorCode: "PAT-05",
+      categoryFocus: "accessories, trim, screens",
+      paymentTerms: "Net 45",
+      leadTimeDays: 12,
+      reliabilityScore: 85,
+      preferredShippingMethod: "LTL freight",
+      operationsEmail: prairieUser.email,
+      createdAt: daysAgo(15),
+      updatedAt: daysAgo(2),
     },
   ])
   .run();
@@ -1294,6 +1555,54 @@ db.insert(schema.vendorCatalogItems)
       createdAt: daysAgo(14),
       updatedAt: hoursAgo(12),
     },
+    {
+      vendorCustomerId: summitAccount.id,
+      productId: productBySku.get("WTH-BLB-EPD")!.id,
+      vendorSku: "SSG-BLB-EPD-50",
+      unitCost: 28,
+      minimumOrderQty: 40,
+      leadTimeDays: 7,
+      availableQty: 320,
+      status: "active",
+      createdAt: daysAgo(12),
+      updatedAt: daysAgo(1),
+    },
+    {
+      vendorCustomerId: summitAccount.id,
+      productId: productBySku.get("WTH-FIN-BLK")!.id,
+      vendorSku: "SSG-FIN-BLK-100",
+      unitCost: 22,
+      minimumOrderQty: 60,
+      leadTimeDays: 5,
+      availableQty: 500,
+      status: "active",
+      createdAt: daysAgo(12),
+      updatedAt: daysAgo(2),
+    },
+    {
+      vendorCustomerId: prairieAccount.id,
+      productId: productBySku.get("ACC-SCR-RET")!.id,
+      vendorSku: "PAT-SCR-RET",
+      unitCost: 42,
+      minimumOrderQty: 25,
+      leadTimeDays: 12,
+      availableQty: 85,
+      status: "active",
+      createdAt: daysAgo(10),
+      updatedAt: daysAgo(2),
+    },
+    {
+      vendorCustomerId: prairieAccount.id,
+      productId: productBySku.get("ACC-TRM-INT")!.id,
+      vendorSku: "PAT-TRM-INT",
+      unitCost: 28,
+      minimumOrderQty: 30,
+      leadTimeDays: 10,
+      availableQty: 12,
+      status: "constrained",
+      createdAt: daysAgo(10),
+      updatedAt: hoursAgo(18),
+    },
   ])
   .run();
 
@@ -1335,6 +1644,32 @@ const purchaseOrderSeed = [
     lines: [
       { sku: "HDW-LCK-SLD", quantity: 300, unitCost: 27 },
       { sku: "HDW-CRK-OPR", quantity: 240, unitCost: 16.5 },
+    ],
+  },
+  {
+    vendorCustomerId: summitAccount.id,
+    issuedByUserId: adminUser.id,
+    purchaseOrderNumber: "PO-2026-2004",
+    status: "confirmed" as const,
+    expectedShipDate: daysFromNow(4).split("T")[0]!,
+    createdAt: daysAgo(5),
+    updatedAt: hoursAgo(12),
+    lines: [
+      { sku: "WTH-BLB-EPD", quantity: 200, unitCost: 28 },
+      { sku: "WTH-FIN-BLK", quantity: 300, unitCost: 22 },
+    ],
+  },
+  {
+    vendorCustomerId: prairieAccount.id,
+    issuedByUserId: adminUser.id,
+    purchaseOrderNumber: "PO-2026-2005",
+    status: "shipped" as const,
+    expectedShipDate: daysFromNow(1).split("T")[0]!,
+    createdAt: daysAgo(9),
+    updatedAt: hoursAgo(20),
+    lines: [
+      { sku: "ACC-SCR-RET", quantity: 50, unitCost: 42 },
+      { sku: "ACC-TRM-INT", quantity: 80, unitCost: 28 },
     ],
   },
 ];
@@ -1418,6 +1753,41 @@ db.insert(schema.vendorShipments)
       ]),
       createdAt: hoursAgo(24),
     },
+    {
+      purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2004")!.id,
+      carrier: "Summit Direct",
+      trackingNumber: "VSHIP-SSG-2004",
+      status: "pending",
+      estimatedDelivery: daysFromNow(5).split("T")[0]!,
+      events: JSON.stringify([
+        {
+          status: "scheduled",
+          description: "Seal and gasket batch confirmed for packing",
+          timestamp: hoursAgo(10),
+        },
+      ]),
+      createdAt: hoursAgo(10),
+    },
+    {
+      purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2005")!.id,
+      carrier: "UPS Freight",
+      trackingNumber: "VSHIP-PAT-2005",
+      status: "in_transit",
+      estimatedDelivery: daysFromNow(1).split("T")[0]!,
+      events: JSON.stringify([
+        {
+          status: "picked_up",
+          description: "Pallets picked up from Kansas City warehouse",
+          timestamp: hoursAgo(36),
+        },
+        {
+          status: "in_transit",
+          description: "In transit via regional hub",
+          timestamp: hoursAgo(18),
+        },
+      ]),
+      createdAt: hoursAgo(36),
+    },
   ])
   .run();
 
@@ -1426,7 +1796,7 @@ db.insert(schema.vendorInvoices)
     {
       purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2001")!.id,
       vendorCustomerId: northStarAccount.id,
-      invoiceNumber: "VINV-2001",
+      invoiceNumber: "INV-V-2026-2001",
       amount: 4970,
       status: "approved",
       dueDate: daysFromNow(12).split("T")[0]!,
@@ -1436,7 +1806,7 @@ db.insert(schema.vendorInvoices)
     {
       purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2002")!.id,
       vendorCustomerId: bluePeakAccount.id,
-      invoiceNumber: "VINV-2002",
+      invoiceNumber: "INV-V-2026-2002",
       amount: 9072,
       status: "pending",
       dueDate: daysFromNow(18).split("T")[0]!,
@@ -1446,12 +1816,32 @@ db.insert(schema.vendorInvoices)
     {
       purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2003")!.id,
       vendorCustomerId: redRiverAccount.id,
-      invoiceNumber: "VINV-2003",
+      invoiceNumber: "INV-V-2026-2003",
       amount: 12060,
       status: "disputed",
       dueDate: daysFromNow(7).split("T")[0]!,
       paidAt: null,
       createdAt: daysAgo(3),
+    },
+    {
+      purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2004")!.id,
+      vendorCustomerId: summitAccount.id,
+      invoiceNumber: "INV-V-2026-2004",
+      amount: 12200,
+      status: "pending",
+      dueDate: daysFromNow(14).split("T")[0]!,
+      paidAt: null,
+      createdAt: daysAgo(1),
+    },
+    {
+      purchaseOrderId: purchaseOrderByNumber.get("PO-2026-2005")!.id,
+      vendorCustomerId: prairieAccount.id,
+      invoiceNumber: "INV-V-2026-2005",
+      amount: 4340,
+      status: "approved",
+      dueDate: daysFromNow(10).split("T")[0]!,
+      paidAt: null,
+      createdAt: daysAgo(2),
     },
   ])
   .run();
@@ -1488,6 +1878,76 @@ const seededDocuments = db
       currentVersionNumber: 1,
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
+    },
+    {
+      customerId: insertedCustomers[1]!.id,
+      ownerUserId: userByEmail.get("purchasing@pacificglaze.com")!.id,
+      kind: "invoice",
+      title: "Glass Order Reconciliation",
+      status: "published",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(5),
+      updatedAt: daysAgo(4),
+    },
+    {
+      customerId: insertedCustomers[6]!.id,
+      ownerUserId: greatLakesUser.id,
+      kind: "report",
+      title: "Q1 Window Procurement Review",
+      status: "draft",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+    {
+      customerId: insertedCustomers[8]!.id,
+      ownerUserId: cascadeUser.id,
+      kind: "brief",
+      title: "New Account Onboarding Brief",
+      status: "draft",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(2),
+      updatedAt: daysAgo(2),
+    },
+    {
+      customerId: insertedCustomers[9]!.id,
+      ownerUserId: loneStarUser.id,
+      kind: "agreement",
+      title: "Volume Pricing Agreement Draft",
+      status: "draft",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(4),
+      updatedAt: daysAgo(3),
+    },
+    {
+      customerId: bluePeakAccount.id,
+      ownerUserId: bluePeakUser.id,
+      kind: "report",
+      title: "Insulated Glass Production Forecast",
+      status: "published",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(6),
+      updatedAt: daysAgo(5),
+    },
+    {
+      customerId: summitAccount.id,
+      ownerUserId: summitUser.id,
+      kind: "brief",
+      title: "Seal Product Line Overview",
+      status: "draft",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(2),
+    },
+    {
+      customerId: prairieAccount.id,
+      ownerUserId: prairieUser.id,
+      kind: "report",
+      title: "Trim Kit Availability Report",
+      status: "draft",
+      currentVersionNumber: 1,
+      createdAt: daysAgo(2),
+      updatedAt: daysAgo(1),
     },
   ])
   .returning()
@@ -1529,6 +1989,89 @@ db.insert(schema.documentVersions)
       }),
       filePath: null,
       createdByUserId: northStarUser.id,
+      createdAt: daysAgo(2),
+    },
+    {
+      documentId: seededDocuments[3]!.id,
+      versionNumber: 1,
+      title: "Glass Order Reconciliation",
+      contentMarkdown:
+        "# Glass Order Reconciliation\n\n## Summary\n\n- 350 IG units received across two deliveries\n- Pricing matched contract terms at 15% discount\n- One short-ship of 12 units pending credit",
+      metadata: JSON.stringify({ seeded: true, template: "invoice_review" }),
+      filePath: null,
+      createdByUserId: userByEmail.get("purchasing@pacificglaze.com")!.id,
+      createdAt: daysAgo(5),
+    },
+    {
+      documentId: seededDocuments[4]!.id,
+      versionNumber: 1,
+      title: "Q1 Window Procurement Review",
+      contentMarkdown:
+        "# Q1 Window Procurement Review\n\n## Key Metrics\n\n- 135 window units ordered across 3 POs\n- Average lead time: 11 days\n- Bay window units on backorder — switch to casement recommended",
+      metadata: JSON.stringify({ seeded: true, template: "quarterly_review" }),
+      filePath: null,
+      createdByUserId: greatLakesUser.id,
+      createdAt: daysAgo(3),
+    },
+    {
+      documentId: seededDocuments[5]!.id,
+      versionNumber: 1,
+      title: "New Account Onboarding Brief",
+      contentMarkdown:
+        "# Cascade Fenestration — Onboarding Brief\n\n## Account Setup\n\n- Primary contact: Derek Olsen\n- Focus: doors and sliding systems for Pacific Northwest market\n- Initial order placed, awaiting delivery confirmation",
+      metadata: JSON.stringify({ seeded: true, template: "onboarding_brief" }),
+      filePath: null,
+      createdByUserId: cascadeUser.id,
+      createdAt: daysAgo(2),
+    },
+    {
+      documentId: seededDocuments[6]!.id,
+      versionNumber: 1,
+      title: "Volume Pricing Agreement Draft",
+      contentMarkdown:
+        "# Volume Pricing Agreement — Lone Star Door Systems\n\n## Terms\n\n- 12% discount on hardware above 500 units per quarter\n- Fixed pricing on entry and french doors through Q3\n- Payment terms: Net 30",
+      metadata: JSON.stringify({ seeded: true, template: "agreement" }),
+      filePath: null,
+      createdByUserId: loneStarUser.id,
+      createdAt: daysAgo(4),
+    },
+    {
+      documentId: seededDocuments[7]!.id,
+      versionNumber: 1,
+      title: "Insulated Glass Production Forecast",
+      contentMarkdown:
+        "# BluePeak Glass — Production Forecast\n\n## Capacity\n\n- Current batch: 60 Low-E double pane + 24 triple pane\n- Lead time elevated to 22 days for triple pane\n- Furnace maintenance window scheduled for next month",
+      metadata: JSON.stringify({
+        seeded: true,
+        template: "vendor_production_forecast",
+      }),
+      filePath: null,
+      createdByUserId: bluePeakUser.id,
+      createdAt: daysAgo(6),
+    },
+    {
+      documentId: seededDocuments[8]!.id,
+      versionNumber: 1,
+      title: "Seal Product Line Overview",
+      contentMarkdown:
+        "# Summit Seal — Product Line Overview\n\n## Capabilities\n\n- EPDM bulb seals: high volume, 7-day lead\n- Fin seal weatherstrip: standard stock item\n- Custom gasket profiles available on 21-day lead",
+      metadata: JSON.stringify({ seeded: true, template: "vendor_overview" }),
+      filePath: null,
+      createdByUserId: summitUser.id,
+      createdAt: daysAgo(3),
+    },
+    {
+      documentId: seededDocuments[9]!.id,
+      versionNumber: 1,
+      title: "Trim Kit Availability Report",
+      contentMarkdown:
+        "# Prairie Accessories — Trim Kit Availability\n\n## Status\n\n- Interior trim kits constrained — raw material backlog\n- Retractable screen kits available at standard lead\n- Flashing kit stock adequate through Q2",
+      metadata: JSON.stringify({
+        seeded: true,
+        template: "vendor_availability",
+      }),
+      filePath: null,
+      createdByUserId: prairieUser.id,
       createdAt: daysAgo(2),
     },
   ])
@@ -1605,6 +2148,16 @@ db.insert(schema.connectorAccounts)
       metadata: JSON.stringify({ seeded: true }),
       createdAt: daysAgo(3),
       updatedAt: daysAgo(1),
+    },
+    {
+      customerId: summitAccount.id,
+      provider: "gmail",
+      accountIdentifier: "ops@summitseal.com",
+      status: "connected",
+      scopes: JSON.stringify(["gmail.compose", "gmail.readonly"]),
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: daysAgo(5),
+      updatedAt: daysAgo(2),
     },
   ])
   .run();
@@ -2085,6 +2638,76 @@ const assistantSessions = db
       createdAt: hoursAgo(7),
       updatedAt: hoursAgo(1),
     },
+    {
+      customerId: insertedCustomers[6]!.id,
+      userId: greatLakesUser.id,
+      role: "customer",
+      mode: "text",
+      title: "Window order status check",
+      status: "active",
+      sourcePage: "/dashboard",
+      linkedWorkflowRunId: null,
+      linkedDocumentId: seededDocuments[4]!.id,
+      lastError: null,
+      createdAt: hoursAgo(6),
+      updatedAt: hoursAgo(3),
+    },
+    {
+      customerId: insertedCustomers[8]!.id,
+      userId: cascadeUser.id,
+      role: "customer",
+      mode: "text",
+      title: "First order tracking",
+      status: "active",
+      sourcePage: "/dashboard",
+      linkedWorkflowRunId: null,
+      linkedDocumentId: seededDocuments[5]!.id,
+      lastError: null,
+      createdAt: hoursAgo(5),
+      updatedAt: hoursAgo(2),
+    },
+    {
+      customerId: insertedCustomers[9]!.id,
+      userId: loneStarUser.id,
+      role: "customer",
+      mode: "voice",
+      title: "Pricing agreement discussion",
+      status: "active",
+      sourcePage: "/invoices",
+      linkedWorkflowRunId: null,
+      linkedDocumentId: seededDocuments[6]!.id,
+      lastError: null,
+      createdAt: hoursAgo(4),
+      updatedAt: hoursAgo(1),
+    },
+    {
+      customerId: summitAccount.id,
+      userId: summitUser.id,
+      role: "vendor",
+      mode: "text",
+      title: "Seal batch scheduling",
+      status: "active",
+      sourcePage: "/vendor/purchase-orders",
+      linkedWorkflowRunId: null,
+      linkedDocumentId: seededDocuments[8]!.id,
+      lastError: null,
+      createdAt: hoursAgo(8),
+      updatedAt: hoursAgo(4),
+    },
+    {
+      customerId: prairieAccount.id,
+      userId: prairieUser.id,
+      role: "vendor",
+      mode: "agentic",
+      title: "Trim kit constraint review",
+      status: "active",
+      sourcePage: "/vendor/catalog",
+      linkedWorkflowRunId: null,
+      linkedDocumentId: seededDocuments[9]!.id,
+      lastError: null,
+      createdAt: hoursAgo(6),
+      updatedAt: hoursAgo(2),
+    },
   ])
   .returning()
   .all();
@@ -2295,6 +2918,96 @@ db.insert(schema.assistantEntries)
       metadata: JSON.stringify({ seeded: true }),
       createdAt: hoursAgo(1),
     },
+    {
+      sessionId: assistantSessionByTitle.get("Window order status check")!.id,
+      role: "user",
+      entryType: "message",
+      content:
+        "What is the status of our recent bay window and casement orders?",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(6),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Window order status check")!.id,
+      role: "assistant",
+      entryType: "message",
+      content:
+        "You have three active orders. ESP-2026-0019 shipped 8 days ago with bay windows and hinges. ESP-2026-0020 is confirmed and pending production for 15 picture window units.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(5),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("First order tracking")!.id,
+      role: "user",
+      entryType: "message",
+      content: "Track my first order — when should I expect the patio doors?",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(5),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("First order tracking")!.id,
+      role: "assistant",
+      entryType: "message",
+      content:
+        "Your delivered order ESP-2026-0023 arrived 36 days ago. Your current shipment ESP-2026-0024 with sliding windows is in transit and should arrive within the week.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(4),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Pricing agreement discussion")!
+        .id,
+      role: "user",
+      entryType: "transcript",
+      content:
+        "Walk me through the volume pricing tiers for hardware components.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(4),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Pricing agreement discussion")!
+        .id,
+      role: "assistant",
+      entryType: "speech",
+      content:
+        "Your current agreement gives 12 percent off hardware above 500 units per quarter. Based on your last two orders, you are on track to exceed that threshold this quarter.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(3),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Seal batch scheduling")!.id,
+      role: "user",
+      entryType: "message",
+      content:
+        "When is the next EPDM bulb seal batch going out and what quantity?",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(8),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Seal batch scheduling")!.id,
+      role: "assistant",
+      entryType: "message",
+      content:
+        "PO-2026-2004 is confirmed for 200 EPDM bulb seal units and 300 fin seal units. The shipment is scheduled within 4 days. Invoice INV-V-2026-2004 is pending at 12,200 dollars.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(7),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Trim kit constraint review")!.id,
+      role: "system",
+      entryType: "event",
+      content: "Agentic session ready. Reviewing constrained trim catalog.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(6),
+    },
+    {
+      sessionId: assistantSessionByTitle.get("Trim kit constraint review")!.id,
+      role: "assistant",
+      entryType: "message",
+      content:
+        "Interior trim kits are constrained with only 12 units available. The in-transit shipment VSHIP-PAT-2005 should relieve this within 24 hours. Retractable screen kits are at healthy stock levels.",
+      metadata: JSON.stringify({ seeded: true }),
+      createdAt: hoursAgo(5),
+    },
   ])
   .run();
 
@@ -2357,12 +3070,83 @@ db.insert(schema.chatCaches)
       createdAt: hoursAgo(7),
       updatedAt: hoursAgo(1),
     },
+    {
+      customerId: insertedCustomers[6]!.id,
+      userId: greatLakesUser.id,
+      sessionId: assistantSessionByTitle.get("Window order status check")!.id,
+      role: "customer",
+      sourceMode: "text",
+      normalizedPrompt: "bay window order status",
+      promptLabel: "Bay window order status",
+      hitCount: 2,
+      lastResponse:
+        "ESP-2026-0019 shipped with bay windows and hinges. ESP-2026-0020 confirmed for picture windows.",
+      createdAt: hoursAgo(6),
+      updatedAt: hoursAgo(3),
+    },
+    {
+      customerId: insertedCustomers[9]!.id,
+      userId: loneStarUser.id,
+      sessionId: assistantSessionByTitle.get("Pricing agreement discussion")!
+        .id,
+      role: "customer",
+      sourceMode: "voice",
+      normalizedPrompt: "volume pricing tiers hardware",
+      promptLabel: "Volume pricing tiers for hardware",
+      hitCount: 1,
+      lastResponse:
+        "Current agreement gives 12% off hardware above 500 units per quarter.",
+      createdAt: hoursAgo(4),
+      updatedAt: hoursAgo(1),
+    },
+    {
+      customerId: summitAccount.id,
+      userId: summitUser.id,
+      sessionId: assistantSessionByTitle.get("Seal batch scheduling")!.id,
+      role: "vendor",
+      sourceMode: "text",
+      normalizedPrompt: "epdm bulb seal batch schedule",
+      promptLabel: "EPDM bulb seal batch schedule",
+      hitCount: 2,
+      lastResponse:
+        "PO-2026-2004 confirmed for 200 EPDM + 300 fin seal units. Shipping in 4 days.",
+      createdAt: hoursAgo(8),
+      updatedAt: hoursAgo(4),
+    },
   ])
   .run();
 
 console.log(
-  `Seeded ${orderSeed.length} orders, ${invoiceCount} invoices (${overdueInvoices.length} overdue), ${shipmentCount} shipments, ${ediCount} EDI transactions, ${insertedSessions.length} auth sessions, ${assistantSessions.length} assistant sessions, ${insertedSessions.length + 1} audit logs, ${seededDocuments.length} documents, 3 workflow runs, and 4 chat cache records`,
+  `Seeded ${orderSeed.length} orders, ${invoiceCount} invoices (${overdueInvoices.length} overdue), ${shipmentCount} shipments, ${ediCount} EDI transactions, ${insertedSessions.length} auth sessions, ${assistantSessions.length} assistant sessions, ${insertedSessions.length + 1} audit logs, ${seededDocuments.length} documents, 3 workflow runs`,
+);
+
+// Print credentials table
+console.log(
+  "\n╔═══════════════════════════════════════════════════════════════════════════════════════════════════╗",
+);
+console.log(
+  "║                                    LOGIN CREDENTIALS                                            ║",
+);
+console.log(
+  "╠═════════════════════════════════════════════════╦═══════════╦══════════╦════════════════════════╣",
+);
+console.log(
+  "║ Email                                           ║ Password  ║ Role     ║ Company                ║",
+);
+console.log(
+  "╠═════════════════════════════════════════════════╬═══════════╬══════════╬════════════════════════╣",
+);
+for (const user of insertedUsers) {
+  const customer = insertedCustomers.find((c) => c.id === user.customerId);
+  const companyName = (customer?.companyName ?? "").slice(0, 22);
+  const email = user.email.padEnd(47);
+  const role = user.role.padEnd(8);
+  const company = companyName.padEnd(22);
+  console.log(`║ ${email} ║ demo1234  ║ ${role} ║ ${company} ║`);
+}
+console.log(
+  "╚═════════════════════════════════════════════════╩═══════════╩══════════╩════════════════════════╝",
 );
 
 sqlite.close();
-console.log("Seed complete.");
+console.log("\nSeed complete.");
