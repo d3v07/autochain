@@ -1,18 +1,27 @@
-import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import * as schema from "./schema.js";
-import { bootstrapDb } from "./bootstrap.js";
 import { hashSync } from "./hash.js";
+import { openSqlite, getDbPath } from "./client.js";
 
-const DB_PATH = process.env.DATABASE_URL ?? "autochain.db";
-const sqlite = new Database(DB_PATH);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-bootstrapDb(sqlite);
+const forceReseed = process.argv.includes("--force");
+const dbPath = getDbPath();
+console.log(`Using database: ${dbPath}`);
+const sqlite = openSqlite(dbPath);
 const db = drizzle(sqlite, { schema });
 
-// Clear existing data
+// Check if database already has users — skip seeding to preserve sessions/docs
+const existingUsers = db.select().from(schema.users).all();
+if (existingUsers.length > 0 && !forceReseed) {
+  console.log(
+    `Database already seeded (${existingUsers.length} users). Skipping to preserve sessions and documents.`,
+  );
+  console.log("Run with --force to wipe and re-seed.");
+  sqlite.close();
+  process.exit(0);
+}
+
+// Clear existing data (only runs on first seed or --force)
 db.delete(schema.assistantEntries).run();
 db.delete(schema.chatCaches).run();
 db.delete(schema.assistantSessions).run();
